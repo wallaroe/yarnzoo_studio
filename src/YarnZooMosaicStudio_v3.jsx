@@ -129,24 +129,24 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
   const totalW = w + edgeCols;
   // If edges shown, pattern starts at x=1. If not, x=0.
   const xOffset = config.showEdges ? 1 : 0;
+  const rowLabelFontSize = Math.max(3, Math.min(12, cellSize * 0.82));
+  const maxColFontFromCell = (cellSize - 1) / (Math.max(1, String(totalW).length) * 0.62);
+  const colLabelFontSize = Math.max(3, Math.min(11, maxColFontFromCell));
+  const rowDigits = String(h).length;
+  const colDigits = String(totalW).length;
+  const estimatedColLabelWidth = Math.ceil(colDigits * (colLabelFontSize * 0.62));
+  const useStaggeredColumnLabels = estimatedColLabelWidth > cellSize - 2;
+  const sideMargin = Math.max(42, Math.ceil(16 + rowLabelFontSize + rowDigits * (rowLabelFontSize * 0.65)));
+  const marginLeft = sideMargin;
+  const marginRight = sideMargin;
+  const marginTop = Math.max(24, Math.ceil(12 + colLabelFontSize * (useStaggeredColumnLabels ? 2.4 : 1.5)));
+  const marginBottom = Math.max(44, Math.ceil(16 + colLabelFontSize * (useStaggeredColumnLabels ? 2.6 : 1.5)));
 
   const draw = useCallback(() => {
     const c = ref.current;
     if (!c || !w || !h) return;
     const ctx = c.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
-
-    const marginLeft = 10;
-    const marginTop = 10;
-    const rowLabelFontSize = Math.max(3, Math.min(12, cellSize * 0.82));
-    const maxColFontFromCell = (cellSize - 1) / (Math.max(1, String(totalW).length) * 0.62);
-    const colLabelFontSize = Math.max(3, Math.min(11, maxColFontFromCell));
-    const rowDigits = String(h).length;
-    const colDigits = String(totalW).length;
-    const estimatedColLabelWidth = Math.ceil(colDigits * (colLabelFontSize * 0.62));
-    const useStaggeredColumnLabels = estimatedColLabelWidth > cellSize - 2;
-    const marginRight = Math.max(42, Math.ceil(16 + rowLabelFontSize + rowDigits * (rowLabelFontSize * 0.65)));
-    const marginBottom = Math.max(44, Math.ceil(16 + colLabelFontSize * (useStaggeredColumnLabels ? 2.6 : 1.5)));
 
     const canvasW = totalW * cellSize + marginLeft + marginRight;
     const canvasH = h * cellSize + marginTop + marginBottom;
@@ -228,27 +228,30 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
       ctx.beginPath(); ctx.moveTo(0, y * cellSize); ctx.lineTo(totalW * cellSize, y * cellSize); ctx.stroke();
     }
 
-    // --- Row Numbers (Right Side) ---
+    // --- Row Numbers (Left + Right) ---
     ctx.font = `${rowLabelFontSize}px monospace`;
-    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     for (let y = 0; y < h; y++) {
       const rowNum = h - y;
       const colorIdx = getRowColor(rowNum - 1);
-      const cx = totalW * cellSize + 5;
+      const rightDotX = totalW * cellSize + 5;
+      const leftDotX = -5;
       const cy = y * cellSize + cellSize / 2;
       const dotRadius = Math.max(1.5, Math.min(3, cellSize * 0.18));
 
       ctx.fillStyle = colorIdx === 0 ? colAHex : colBHex;
-      ctx.beginPath(); ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(rightDotX, cy, dotRadius, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(leftDotX, cy, dotRadius, 0, Math.PI * 2); ctx.fill();
 
       ctx.fillStyle = "#666";
-      ctx.fillText(`${rowNum}`, cx + 6, cy + 0.5);
+      ctx.textAlign = "left";
+      ctx.fillText(`${rowNum}`, rightDotX + 6, cy + 0.5);
+      ctx.textAlign = "right";
+      ctx.fillText(`${rowNum}`, leftDotX - 6, cy + 0.5);
     }
 
-    // --- Column Numbers (Bottom) ---
+    // --- Column Numbers (Top + Bottom) ---
     ctx.textAlign = "center";
-    ctx.textBaseline = "top";
     ctx.fillStyle = "#666";
     ctx.font = `${colLabelFontSize}px monospace`;
     ctx.strokeStyle = "#888";
@@ -267,19 +270,30 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
       const centerX = visualX * cellSize + cellSize / 2;
       const bottomY = h * cellSize + 4;
+      const topY = -4;
       const labelY = bottomY + 2 + (useStaggeredColumnLabels && colNum % 2 === 0 ? colLabelFontSize + 1 : 0);
+      const topLabelY = -6 - (useStaggeredColumnLabels && colNum % 2 === 0 ? colLabelFontSize + 1 : 0);
 
-      // Tick
+      // Bottom tick
       ctx.beginPath();
       ctx.moveTo(centerX, h * cellSize);
       ctx.lineTo(centerX, bottomY);
       ctx.stroke();
 
-      // Upright numbers; stagger when cells are too narrow.
+      // Top tick
+      ctx.beginPath();
+      ctx.moveTo(centerX, 0);
+      ctx.lineTo(centerX, topY);
+      ctx.stroke();
+
+      // Upright numbers, shown at both top and bottom.
+      ctx.textBaseline = "top";
       ctx.fillText(`${colNum}`, centerX, labelY);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${colNum}`, centerX, topLabelY);
     }
 
-  }, [chart, cellSize, colA, colB, w, h, config]);
+  }, [chart, cellSize, colA, colB, w, h, config, totalW, marginLeft, marginRight, marginTop, marginBottom, rowLabelFontSize, colLabelFontSize, useStaggeredColumnLabels]);
 
   useEffect(() => { draw(); }, [draw]);
 
@@ -316,8 +330,8 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
     const c = ref.current;
     if (!c) return null;
     const r = c.getBoundingClientRect();
-    const mx = e.clientX - r.left - 10; // margin
-    const my = e.clientY - r.top - 10;
+    const mx = e.clientX - r.left - marginLeft;
+    const my = e.clientY - r.top - marginTop;
 
     const visualX = Math.floor(mx / cellSize);
     const visualY = Math.floor(my / cellSize);

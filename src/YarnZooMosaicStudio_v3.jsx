@@ -138,8 +138,9 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
     const marginLeft = 10;
     const marginTop = 10;
-    const rowLabelFontSize = Math.max(8, Math.min(12, cellSize * 0.75));
-    const colLabelFontSize = Math.max(7, Math.min(11, cellSize * 0.65));
+    const rowLabelFontSize = Math.max(3, Math.min(12, cellSize * 0.82));
+    const maxColFontFromCell = (cellSize - 1) / (Math.max(1, String(totalW).length) * 0.62);
+    const colLabelFontSize = Math.max(3, Math.min(11, maxColFontFromCell));
     const rowDigits = String(h).length;
     const colDigits = String(totalW).length;
     const estimatedColLabelWidth = Math.ceil(colDigits * (colLabelFontSize * 0.62));
@@ -266,7 +267,7 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
       const centerX = visualX * cellSize + cellSize / 2;
       const bottomY = h * cellSize + 4;
-      const labelY = bottomY + 2 + (useStaggeredColumnLabels && colNum % 2 === 0 ? colLabelFontSize + 2 : 0);
+      const labelY = bottomY + 2 + (useStaggeredColumnLabels && colNum % 2 === 0 ? colLabelFontSize + 1 : 0);
 
       // Tick
       ctx.beginPath();

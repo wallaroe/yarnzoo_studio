@@ -497,19 +497,29 @@ export default function App() {
     const { chart: preview } = imageToChart(imgEl, gridW, gridH, threshold);
     const c = previewRef.current;
     const ctx = c.getContext("2d");
-    const s = Math.max(1, Math.min(4, Math.floor(450 / Math.max(gridW, gridH))));
-    c.width = gridW * s; c.height = gridH * s;
+    const edgeCols = projConfig.showEdges ? 2 : 0;
+    const totalCols = gridW + edgeCols;
+    const xOffset = projConfig.showEdges ? 1 : 0;
+    const s = Math.max(1, Math.min(4, Math.floor(450 / Math.max(totalCols, gridH))));
+    c.width = totalCols * s; c.height = gridH * s;
     for (let y = 0; y < gridH; y++) {
       const rowNum = gridH - y;
       const colorIdx = getRowColor(rowNum - 1);
       const rowHex = colorIdx === 0 ? colA.hex : colB.hex;
       const rowHexLight = colorIdx === 0 ? colA.hex + "50" : colB.hex + "50";
+
+      if (projConfig.showEdges) {
+        ctx.fillStyle = rowHex;
+        ctx.fillRect(0, y * s, s, s);
+        ctx.fillRect((totalCols - 1) * s, y * s, s, s);
+      }
+
       for (let x = 0; x < gridW; x++) {
         ctx.fillStyle = preview[y][x] ? rowHex : rowHexLight;
-        ctx.fillRect(x * s, y * s, s, s);
+        ctx.fillRect((xOffset + x) * s, y * s, s, s);
       }
     }
-  }, [step, imgEl, gridW, gridH, threshold, colA, colB]);
+  }, [step, imgEl, gridW, gridH, threshold, colA, colB, projConfig.showEdges]);
 
   const confirmGrid = () => {
     const { chart: c, fixes } = imageToChart(imgEl, gridW, gridH, threshold);

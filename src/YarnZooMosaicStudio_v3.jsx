@@ -11,6 +11,46 @@ const B = {
   brown: "#5C4033", dark: "#2A2A2A", white: "#FFFFFF",
 };
 
+const STORAGE_KEY = "yarnzoo_mosaic_workspace_v1";
+const DEFAULT_FOLDER_ID = "folder-default";
+const DELETED_FOLDER_ID = "folder-deleted";
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+const DEFAULT_FOLDERS = [
+  { id: DEFAULT_FOLDER_ID, name: "Mijn charts", system: true },
+  { id: DELETED_FOLDER_ID, name: "Verwijderde charts", system: true },
+];
+
+function loadWorkspace() {
+  if (typeof window === "undefined") {
+    return { folders: DEFAULT_FOLDERS, charts: [] };
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { folders: DEFAULT_FOLDERS, charts: [] };
+    const parsed = JSON.parse(raw);
+    const folders = Array.isArray(parsed?.folders) ? parsed.folders : [];
+    const charts = Array.isArray(parsed?.charts) ? parsed.charts : [];
+    const folderIds = new Set(folders.map(f => f.id));
+    const mergedFolders = [...folders];
+    for (const f of DEFAULT_FOLDERS) {
+      if (!folderIds.has(f.id)) mergedFolders.push(f);
+    }
+    return { folders: mergedFolders, charts };
+  } catch {
+    return { folders: DEFAULT_FOLDERS, charts: [] };
+  }
+}
+
+function saveWorkspace(folders, charts) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ folders, charts }));
+}
+
+function withinRestoreWindow(chart) {
+  return !!(chart?.isDeleted && chart?.deletedAt && (Date.now() - new Date(chart.deletedAt).getTime() <= ONE_WEEK_MS));
+}
+
 /*
   OVERLAY MOSAIC CROCHET LOGIC:
   - Rows alternate color: row 1 = color A, row 2 = color B...
@@ -445,6 +485,14 @@ export default function App() {
   const [swatchRows, setSwatchRows] = useState(28);
   const [desiredWidth, setDesiredWidth] = useState(35);
   const [desiredHeight, setDesiredHeight] = useState(45);
+  const [folders, setFolders] = useState(() => loadWorkspace().folders);
+  const [savedCharts, setSavedCharts] = useState(() => loadWorkspace().charts);
+  const [currentChartId, setCurrentChartId] = useState(null);
+  const [chartTitle, setChartTitle] = useState("Nieuwe chart");
+  const [chartFolderId, setChartFolderId] = useState(DEFAULT_FOLDER_ID);
+  const [openMenu, setOpenMenu] = useState("");
+  const [folderDraftName, setFolderDraftName] = useState("");
+  const [libraryFilter, setLibraryFilter] = useState("all");
 
   // Project Settings
   const [projConfig, setProjConfig] = useState({
@@ -453,6 +501,173 @@ export default function App() {
   });
 
   const previewRef = useRef(null);
+  const selectableFolders = folders.filter(f => f.id !== DELETED_FOLDER_ID);
+  const findFolderName = (id) => folders.find(f => f.id === id)?.name || "Onbekend";
+
+  useEffect(() => {
+    saveWorkspace(folders, savedCharts);
+  }, [folders, savedCharts]);
+
+  const upsertSavedChart = (record) => {
+    setSavedCharts(prev => {
+      const exists = prev.some(c => c.id === record.id);
+      return exists ? prev.map(c => c.id === record.id ? record : c) : [record, ...prev];
+    });
+  };
+
+  const buildCurrentChartRecord = (overrides = {}) => {
+    if (!chart) return null;
+    const now = new Date().toISOString();
+    const recordId = overrides.id || currentChartId || `chart-${Date.now()}`;
+    const existing = savedCharts.find(c => c.id === recordId);
+    const fallbackFolderId = selectableFolders[0]?.id || DEFAULT_FOLDER_ID;
+    const base = {
+      id: recordId,
+      title: (chartTitle || "Nieuwe chart").trim() || "Nieuwe chart",
+      folderId: chartFolderId || fallbackFolderId,
+      previousFolderId: existing?.previousFolderId || null,
+      isDeleted: false,
+      deletedAt: null,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      gridW,
+      gridH,
+      threshold,
+      chart: chart.map(r => [...r]),
+      cellSize,
+      colA: { ...colA },
+      colB: { ...colB },
+      projConfig: { ...projConfig },
+      calcUnit,
+      calcIncludesEdges,
+      swatchWidth,
+      swatchHeight,
+      swatchStitches,
+      swatchRows,
+      desiredWidth,
+      desiredHeight,
+    };
+    return { ...base, ...overrides, id: recordId, updatedAt: now };
+  };
+
+  const saveCurrentChart = () => {
+    const record = buildCurrentChartRecord();
+    if (!record) {
+      alert("Er is nog geen teltekening om op te slaan.");
+      return;
+    }
+    upsertSavedChart(record);
+    setCurrentChartId(record.id);
+    setChartTitle(record.title);
+    setChartFolderId(record.folderId);
+    alert("Chart opgeslagen.");
+  };
+
+  const newChart = () => {
+    setCurrentChartId(null);
+    setChartTitle("Nieuwe chart");
+    setChartFolderId(DEFAULT_FOLDER_ID);
+    setOrigImage(null);
+    setImgEl(null);
+    setChart(null);
+    setFixCount(0);
+    setStep("upload");
+    setOpenMenu("");
+  };
+
+  const openSavedChart = (record) => {
+    const now = Date.now();
+    const deletedAt = record?.deletedAt ? new Date(record.deletedAt).getTime() : null;
+    const isExpiredDeleted = record?.isDeleted && deletedAt && (now - deletedAt > ONE_WEEK_MS);
+    if (isExpiredDeleted) {
+      alert("Deze verwijderde chart is ouder dan 7 dagen en kan niet meer automatisch worden hersteld.");
+      return;
+    }
+
+    let nextRecord = record;
+    if (record?.isDeleted && withinRestoreWindow(record)) {
+      const restoredFolderId = folders.some(f => f.id === record.previousFolderId) ? record.previousFolderId : DEFAULT_FOLDER_ID;
+      nextRecord = {
+        ...record,
+        isDeleted: false,
+        deletedAt: null,
+        folderId: restoredFolderId,
+        updatedAt: new Date().toISOString(),
+      };
+      upsertSavedChart(nextRecord);
+    }
+
+    setCurrentChartId(nextRecord.id);
+    setChartTitle(nextRecord.title || "Nieuwe chart");
+    setChartFolderId(nextRecord.folderId || DEFAULT_FOLDER_ID);
+    setGridW(nextRecord.gridW || 140);
+    setGridH(nextRecord.gridH || 140);
+    setThreshold(nextRecord.threshold || 128);
+    setChart(Array.isArray(nextRecord.chart) ? nextRecord.chart.map(r => [...r]) : null);
+    setCellSize(nextRecord.cellSize || 4);
+    setColA(nextRecord.colA || { name: "Zandvoort", hex: "#E8DCC8" });
+    setColB(nextRecord.colB || { name: "Arnhem", hex: "#C75050" });
+    setProjConfig(nextRecord.projConfig || { direction: "RtoL", showEdges: true });
+    setCalcUnit(nextRecord.calcUnit || "cm");
+    setCalcIncludesEdges(typeof nextRecord.calcIncludesEdges === "boolean" ? nextRecord.calcIncludesEdges : true);
+    setSwatchWidth(nextRecord.swatchWidth || 10);
+    setSwatchHeight(nextRecord.swatchHeight || 10);
+    setSwatchStitches(nextRecord.swatchStitches || 28);
+    setSwatchRows(nextRecord.swatchRows || 28);
+    setDesiredWidth(nextRecord.desiredWidth || 35);
+    setDesiredHeight(nextRecord.desiredHeight || 45);
+    setOrigImage(null);
+    setImgEl(null);
+    setStep("edit");
+    setOpenMenu("");
+  };
+
+  const deleteCurrentChart = () => {
+    if (!chart) {
+      alert("Er is geen actieve chart om te verwijderen.");
+      return;
+    }
+    const record = buildCurrentChartRecord();
+    if (!record) return;
+    const deletedRecord = {
+      ...record,
+      previousFolderId: record.folderId || DEFAULT_FOLDER_ID,
+      folderId: DELETED_FOLDER_ID,
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    upsertSavedChart(deletedRecord);
+    newChart();
+  };
+
+  const addFolder = () => {
+    const name = folderDraftName.trim();
+    if (!name) return;
+    const id = `folder-${Date.now()}`;
+    setFolders(prev => [...prev, { id, name, system: false }]);
+    setFolderDraftName("");
+  };
+
+  const renameFolder = (folderId) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder || folder.system) return;
+    const name = window.prompt("Nieuwe mapnaam", folder.name);
+    if (!name || !name.trim()) return;
+    setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: name.trim() } : f));
+  };
+
+  const removeFolder = (folderId) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder || folder.system) return;
+    setFolders(prev => prev.filter(f => f.id !== folderId));
+    setSavedCharts(prev => prev.map(c => {
+      if (c.folderId === folderId) return { ...c, folderId: DEFAULT_FOLDER_ID };
+      if (c.previousFolderId === folderId) return { ...c, previousFolderId: DEFAULT_FOLDER_ID };
+      return c;
+    }));
+    if (chartFolderId === folderId) setChartFolderId(DEFAULT_FOLDER_ID);
+  };
 
   const calculatorResult = (() => {
     if (
@@ -576,8 +791,17 @@ export default function App() {
 
   const goToStep = (nextStep) => {
     if (!canGoToStep[nextStep]) return;
+    setOpenMenu("");
     setStep(nextStep);
   };
+
+  const filteredCharts = [...savedCharts]
+    .filter(c => {
+      if (libraryFilter === "all") return !c.isDeleted;
+      if (libraryFilter === "deleted") return c.isDeleted;
+      return c.folderId === libraryFilter && !c.isDeleted;
+    })
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 
   const exportText = () => {
     const hdr = [
@@ -617,12 +841,106 @@ export default function App() {
               <span style={{ color: B.lightGreen, fontSize: "9px", letterSpacing: "2px", textTransform: "uppercase", marginLeft: "8px" }}>Mosaic Studio v0.3</span>
             </div>
           </div>
-          <Steps current={step} onSelect={goToStep} canGoToStep={canGoToStep} />
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+            <button style={btnHead} onClick={() => setOpenMenu(openMenu === "file" ? "" : "file")}>Bestand</button>
+            <span style={{ color: "#fff", fontSize: "11px", opacity: 0.9, maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {chartTitle}
+            </span>
+            <Steps current={step} onSelect={goToStep} canGoToStep={canGoToStep} />
+          </div>
         </div>
         <div style={{ height: "3px", background: `linear-gradient(90deg, ${B.lightGreen}, ${B.orange}, ${B.lightGreen})` }} />
       </header>
 
       <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
+        {openMenu === "file" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            <button style={btnSm} onClick={newChart}>Nieuw chart</button>
+            <button style={btnSm} onClick={saveCurrentChart}>Opslaan</button>
+            <button style={btnSm} onClick={() => setOpenMenu("settings")}>Chart instellingen</button>
+            <button style={btnSm} onClick={() => setOpenMenu("library")}>Open bibliotheek</button>
+            <button style={btnSm} onClick={() => setOpenMenu("folders")}>Mappen beheren</button>
+            <button style={{ ...btnSm, borderColor: "#d55", color: "#a11" }} onClick={deleteCurrentChart}>Weggooien</button>
+            <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+          </div>
+        )}
+
+        {openMenu === "settings" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen, marginBottom: "8px" }}>Chart instellingen</div>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+              <span style={lbl}>Titel:</span>
+              <input value={chartTitle} onChange={e => setChartTitle(e.target.value)} style={{ ...inp, width: "180px", textAlign: "left" }} />
+              <span style={lbl}>Map:</span>
+              <select value={chartFolderId} onChange={e => setChartFolderId(e.target.value)} style={{ ...inp, width: "170px" }}>
+                {selectableFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <button style={btnSm} onClick={saveCurrentChart}>Opslaan</button>
+              <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+            </div>
+          </div>
+        )}
+
+        {openMenu === "folders" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen, marginBottom: "8px" }}>Mappen beheren</div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
+              <input value={folderDraftName} onChange={e => setFolderDraftName(e.target.value)} placeholder="Nieuwe mapnaam" style={{ ...inp, width: "170px", textAlign: "left" }} />
+              <button style={btnSm} onClick={addFolder}>Map toevoegen</button>
+              <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              {folders.map(folder => (
+                <div key={folder.id} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "#666" }}>
+                  <strong style={{ minWidth: "170px", color: B.dark }}>{folder.name}</strong>
+                  {folder.system ? (
+                    <span style={{ fontSize: "11px", color: "#999" }}>Systeemmap</span>
+                  ) : (
+                    <>
+                      <button style={btnSm} onClick={() => renameFolder(folder.id)}>Hernoemen</button>
+                      <button style={{ ...btnSm, borderColor: "#d55", color: "#a11" }} onClick={() => removeFolder(folder.id)}>Verwijderen</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {openMenu === "library" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen }}>Bibliotheek</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={lbl}>Filter:</span>
+                <select value={libraryFilter} onChange={e => setLibraryFilter(e.target.value)} style={{ ...inp, width: "180px" }}>
+                  <option value="all">Actieve charts</option>
+                  {selectableFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  <option value="deleted">Verwijderde charts</option>
+                </select>
+                <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflow: "auto" }}>
+              {filteredCharts.length === 0 && <div style={{ fontSize: "12px", color: "#999" }}>Geen charts gevonden.</div>}
+              {filteredCharts.map(saved => {
+                const restorable = withinRestoreWindow(saved);
+                const deletedLabel = saved.isDeleted ? (restorable ? "verwijderd (herstelbaar)" : "verwijderd (termijn verlopen)") : "actief";
+                return (
+                  <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ fontSize: "12px", color: "#555" }}>
+                      <strong style={{ color: B.dark }}>{saved.title || "Naamloze chart"}</strong><br />
+                      {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
+                    </div>
+                    <button style={btnSm} onClick={() => openSavedChart(saved)}>
+                      {saved.isDeleted ? "Herstel + open" : "Open"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {step === "upload" && (
           <div style={{ textAlign: "center", paddingTop: "60px" }}>

@@ -422,6 +422,7 @@ export default function App() {
   const [colA, setColA] = useState({ name: "Zandvoort", hex: "#E8DCC8" });
   const [colB, setColB] = useState({ name: "Arnhem", hex: "#C75050" });
   const [calcUnit, setCalcUnit] = useState("cm");
+  const [calcIncludesEdges, setCalcIncludesEdges] = useState(true);
   const [swatchWidth, setSwatchWidth] = useState(10);
   const [swatchHeight, setSwatchHeight] = useState(10);
   const [swatchStitches, setSwatchStitches] = useState(28);
@@ -446,13 +447,31 @@ export default function App() {
 
     const gaugeW = swatchStitches / swatchWidth;
     const gaugeH = swatchRows / swatchHeight;
-    const chartWidth = Math.max(1, Math.round(desiredWidth * gaugeW));
-    const chartHeight = Math.max(1, Math.round(desiredHeight * gaugeH));
-    const totalStitches = chartWidth * chartHeight;
-    const currentWidth = gridW / gaugeW;
+    const calculatedColumns = Math.max(1, Math.round(desiredWidth * gaugeW));
+    const calculatedRows = Math.max(1, Math.round(desiredHeight * gaugeH));
+    const subtractEdgeCols = projConfig.showEdges && calcIncludesEdges ? 2 : 0;
+    const targetPatternColumns = Math.max(1, calculatedColumns - subtractEdgeCols);
+    const targetTotalColumns = targetPatternColumns + (projConfig.showEdges ? 2 : 0);
+    const calculatorTotalStitches = calculatedColumns * calculatedRows;
+    const appliedTotalStitches = targetTotalColumns * calculatedRows;
+    const currentTotalColumns = projConfig.showEdges ? gridW + 2 : gridW;
+    const currentComparableColumns = calcIncludesEdges ? currentTotalColumns : gridW;
+    const currentWidth = currentComparableColumns / gaugeW;
     const currentHeight = gridH / gaugeH;
 
-    return { gaugeW, gaugeH, chartWidth, chartHeight, totalStitches, currentWidth, currentHeight };
+    return {
+      gaugeW,
+      gaugeH,
+      calculatedColumns,
+      calculatedRows,
+      targetPatternColumns,
+      targetTotalColumns,
+      calculatorTotalStitches,
+      appliedTotalStitches,
+      currentWidth,
+      currentHeight,
+      currentTotalColumns,
+    };
   })();
 
   const handleUpload = (e) => {
@@ -502,8 +521,8 @@ export default function App() {
 
   const applyCalculatedSize = () => {
     if (!calculatorResult) return;
-    setGridW(calculatorResult.chartWidth);
-    setGridH(calculatorResult.chartHeight);
+    setGridW(calculatorResult.targetPatternColumns);
+    setGridH(calculatorResult.calculatedRows);
   };
 
   const patternRows = chart ? generateWrittenPattern(chart, colA, colB, projConfig.direction) : [];
@@ -592,7 +611,7 @@ export default function App() {
                 </div>
               </div>
               <div>
-                <div style={panelLabel}>Telpatroon preview ({gridW} × {gridH})</div>
+                <div style={panelLabel}>Telpatroon preview ({projConfig.showEdges ? gridW + 2 : gridW} × {gridH})</div>
                 <div style={{ background: B.white, borderRadius: "8px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
                   <canvas ref={previewRef} style={{ maxWidth: "100%", imageRendering: "pixelated", borderRadius: "4px" }} />
                 </div>
@@ -620,6 +639,10 @@ export default function App() {
                       <option value="cm">cm</option>
                       <option value="inch">inch</option>
                     </select>
+                    <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "#666", marginLeft: "6px" }}>
+                      <input type="checkbox" checked={calcIncludesEdges} onChange={e => setCalcIncludesEdges(e.target.checked)} />
+                      Kolommen incl. kantsteken
+                    </label>
                   </div>
 
                   <div style={{ fontSize: "10px", fontWeight: 700, color: B.darkGreen, textTransform: "uppercase", letterSpacing: "1px" }}>
@@ -654,9 +677,11 @@ export default function App() {
                   {calculatorResult ? (
                     <div style={{ fontSize: "11px", color: "#555", lineHeight: 1.5, background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px 10px" }}>
                       Gauge: {calculatorResult.gaugeW.toFixed(2)} × {calculatorResult.gaugeH.toFixed(2)} steken per {calcUnit}<br />
-                      Berekend chartformaat: <strong>{calculatorResult.chartWidth}</strong> kolommen × <strong>{calculatorResult.chartHeight}</strong> rijen<br />
-                      Totaal: <strong>{calculatorResult.totalStitches.toLocaleString("nl-NL")}</strong> steken<br />
-                      Huidig raster ({gridW} × {gridH}) wordt ca. {calculatorResult.currentWidth.toFixed(1)} × {calculatorResult.currentHeight.toFixed(1)} {calcUnit}
+                      Calculator uitkomst: <strong>{calculatorResult.calculatedColumns}</strong> kolommen × <strong>{calculatorResult.calculatedRows}</strong> rijen = <strong>{calculatorResult.calculatorTotalStitches.toLocaleString("nl-NL")}</strong> steken<br />
+                      Teltekening toepassing: <strong>{calculatorResult.targetTotalColumns}</strong> kolommen × <strong>{calculatorResult.calculatedRows}</strong> rijen = <strong>{calculatorResult.appliedTotalStitches.toLocaleString("nl-NL")}</strong> steken
+                      {projConfig.showEdges && <><br />({calculatorResult.targetPatternColumns} patroon + 2 kantsteken)</>}
+                      <br />
+                      Huidig raster ({calculatorResult.currentTotalColumns} × {gridH}) is ca. {calculatorResult.currentWidth.toFixed(1)} × {calculatorResult.currentHeight.toFixed(1)} {calcUnit}
                     </div>
                   ) : (
                     <div style={{ fontSize: "11px", color: "#888", background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px 10px" }}>
@@ -676,7 +701,7 @@ export default function App() {
                       cursor: calculatorResult ? "pointer" : "not-allowed",
                     }}
                   >
-                    Gebruik berekende afmetingen ({calculatorResult ? `${calculatorResult.chartWidth} × ${calculatorResult.chartHeight}` : "-"})
+                    Gebruik berekende afmetingen ({calculatorResult ? `${calculatorResult.targetTotalColumns} × ${calculatorResult.calculatedRows}` : "-"})
                   </button>
                 </div>
               </Panel>
@@ -764,6 +789,13 @@ export default function App() {
               <Panel title="Zoom">
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <input type="range" min={2} max={18} value={cellSize} onChange={e => setCellSize(parseInt(e.target.value))} style={{ width: "80px" }} />
+                </div>
+              </Panel>
+              <Panel title="Raster grootte">
+                <div style={{ fontSize: "11px", color: "#666", lineHeight: 1.5 }}>
+                  <strong>{projConfig.showEdges ? gridW + 2 : gridW}</strong> kolommen × <strong>{gridH}</strong> rijen<br />
+                  <strong>{((projConfig.showEdges ? gridW + 2 : gridW) * gridH).toLocaleString("nl-NL")}</strong> totaal steken
+                  {projConfig.showEdges && <><br />({gridW} patroon + 2 kantsteken)</>}
                 </div>
               </Panel>
             </div>

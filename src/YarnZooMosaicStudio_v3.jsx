@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
 
 // ============================================================
 // YARNZOO MOSAIC STUDIO v0.3.1 — Edge Stitches & RtoL Config
@@ -493,6 +494,11 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState("");
   const [folderDraftName, setFolderDraftName] = useState("");
   const [libraryFilter, setLibraryFilter] = useState("all");
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(!hasSupabaseConfig);
+  const [remoteLoaded, setRemoteLoaded] = useState(!hasSupabaseConfig);
+  const [isHydratingRemote, setIsHydratingRemote] = useState(false);
+  const [cloudSyncState, setCloudSyncState] = useState(hasSupabaseConfig ? "guest" : "local");
 
   // Project Settings
   const [projConfig, setProjConfig] = useState({
@@ -503,10 +509,108 @@ export default function App() {
   const previewRef = useRef(null);
   const selectableFolders = folders.filter(f => f.id !== DELETED_FOLDER_ID);
   const findFolderName = (id) => folders.find(f => f.id === id)?.name || "Onbekend";
+  const cloudStatusLabel = {
+    local: "Lokaal",
+    guest: "Cloud gast",
+    syncing: "Cloud synchroniseert",
+    cloud: "Cloud actief",
+    cloud_error: "Cloud fout",
+    setup_needed: "Cloud setup nodig",
+  }[cloudSyncState] || "Lokaal";
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase) {
+      setAuthReady(true);
+      return;
+    }
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setUser(data.session?.user || null);
+      setAuthReady(true);
+      setCloudSyncState(data.session?.user ? "syncing" : "guest");
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUser(session?.user || null);
+      setCloudSyncState(session?.user ? "syncing" : "guest");
+      setRemoteLoaded(false);
+    });
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase || !authReady) return;
+    if (!user) {
+      const local = loadWorkspace();
+      setFolders(local.folders);
+      setSavedCharts(local.charts);
+      setRemoteLoaded(true);
+      setCloudSyncState("guest");
+      return;
+    }
+
+    let active = true;
+    const loadRemoteWorkspace = async () => {
+      setIsHydratingRemote(true);
+      setCloudSyncState("syncing");
+      const { data, error } = await supabase
+        .from("workspaces")
+        .select("data")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        setCloudSyncState(error.code === "42P01" ? "setup_needed" : "cloud_error");
+      } else {
+        const remoteFolders = Array.isArray(data?.data?.folders) ? data.data.folders : null;
+        const remoteCharts = Array.isArray(data?.data?.charts) ? data.data.charts : null;
+        if (remoteFolders && remoteCharts) {
+          const folderIds = new Set(remoteFolders.map(f => f.id));
+          const normalizedFolders = [...remoteFolders];
+          for (const f of DEFAULT_FOLDERS) {
+            if (!folderIds.has(f.id)) normalizedFolders.push(f);
+          }
+          setFolders(normalizedFolders);
+          setSavedCharts(remoteCharts);
+        }
+        setCloudSyncState("cloud");
+      }
+      setRemoteLoaded(true);
+      setIsHydratingRemote(false);
+    };
+
+    loadRemoteWorkspace();
+    return () => { active = false; };
+  }, [user, authReady]);
 
   useEffect(() => {
     saveWorkspace(folders, savedCharts);
   }, [folders, savedCharts]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase || !user || !remoteLoaded || isHydratingRemote || !authReady) return;
+    const timer = setTimeout(async () => {
+      setCloudSyncState("syncing");
+      const { error } = await supabase
+        .from("workspaces")
+        .upsert({
+          user_id: user.id,
+          data: { folders, charts: savedCharts },
+          updated_at: new Date().toISOString(),
+        });
+      if (error) {
+        setCloudSyncState(error.code === "42P01" ? "setup_needed" : "cloud_error");
+      } else {
+        setCloudSyncState("cloud");
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [folders, savedCharts, user, remoteLoaded, isHydratingRemote, authReady]);
 
   const upsertSavedChart = (record) => {
     setSavedCharts(prev => {
@@ -667,6 +771,24 @@ export default function App() {
       return c;
     }));
     if (chartFolderId === folderId) setChartFolderId(DEFAULT_FOLDER_ID);
+  };
+
+  const signInWithGitHub = async () => {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "github",
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) alert("Inloggen via GitHub is mislukt.");
+  };
+
+  const signOutUser = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    const local = loadWorkspace();
+    setFolders(local.folders);
+    setSavedCharts(local.charts);
+    setCloudSyncState("guest");
   };
 
   const calculatorResult = (() => {
@@ -843,8 +965,16 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
             <button style={btnHead} onClick={() => setOpenMenu(openMenu === "file" ? "" : "file")}>Bestand</button>
+            {hasSupabaseConfig && (
+              <button style={btnHead} onClick={user ? signOutUser : signInWithGitHub}>
+                {user ? "Uitloggen" : "Login GitHub"}
+              </button>
+            )}
             <span style={{ color: "#fff", fontSize: "11px", opacity: 0.9, maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {chartTitle}
+            </span>
+            <span style={{ color: "#fff", fontSize: "10px", opacity: 0.75 }}>
+              {cloudStatusLabel}
             </span>
             <Steps current={step} onSelect={goToStep} canGoToStep={canGoToStep} />
           </div>

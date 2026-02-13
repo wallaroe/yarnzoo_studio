@@ -1299,6 +1299,7 @@ function ColorPick({ label, color, set }) {
 const panelLabel = { fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: B.darkGreen, marginBottom: "8px" };
 const lbl = { fontSize: "12px", fontWeight: 600, color: B.brown };
 const inp = { width: "55px", padding: "4px 6px", border: `1px solid ${B.beige}`, borderRadius: "5px", fontSize: "12px", background: B.cream, outline: "none", textAlign: "center" };
+const btnHead = { background: "rgba(255,255,255,0.14)", color: B.white, border: "1px solid rgba(255,255,255,0.28)", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: 700, cursor: "pointer" };
 const btnPri = { background: `linear-gradient(135deg, ${B.orange}, ${B.orangeLight})`, color: B.white, border: "none", borderRadius: "8px", padding: "10px 24px", fontSize: "14px", fontWeight: 700, cursor: "pointer", boxShadow: `0 3px 12px ${B.orange}40` };
 const btnSec = { background: B.white, color: B.dark, border: `1px solid ${B.beige}`, borderRadius: "8px", padding: "10px 20px", fontSize: "13px", fontWeight: 600, cursor: "pointer" };
 const btnTool = { border: "1.5px solid", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };

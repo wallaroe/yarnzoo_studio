@@ -543,6 +543,18 @@ export default function App() {
     total: chart.flat().length,
   } : {};
 
+  const canGoToStep = {
+    upload: true,
+    adjust: !!imgEl,
+    edit: !!chart,
+    pattern: !!chart,
+  };
+
+  const goToStep = (nextStep) => {
+    if (!canGoToStep[nextStep]) return;
+    setStep(nextStep);
+  };
+
   const exportText = () => {
     const hdr = [
       `HAAKPATROON — Overlay Mozaiek`,
@@ -581,7 +593,7 @@ export default function App() {
               <span style={{ color: B.lightGreen, fontSize: "9px", letterSpacing: "2px", textTransform: "uppercase", marginLeft: "8px" }}>Mosaic Studio v0.3</span>
             </div>
           </div>
-          <Steps current={step} />
+          <Steps current={step} onSelect={goToStep} canGoToStep={canGoToStep} />
         </div>
         <div style={{ height: "3px", background: `linear-gradient(90deg, ${B.lightGreen}, ${B.orange}, ${B.lightGreen})` }} />
       </header>
@@ -880,7 +892,7 @@ export default function App() {
   );
 }
 
-function Steps({ current }) {
+function Steps({ current, onSelect, canGoToStep }) {
   const steps = [
     { id: "upload", l: "Upload" },
     { id: "adjust", l: "Conversie" },
@@ -892,14 +904,21 @@ function Steps({ current }) {
     <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
       {steps.map((s, i) => (
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: "4px",
-            background: i === idx ? B.orange : i < idx ? B.lightGreen : "rgba(255,255,255,0.15)",
-            borderRadius: "12px", padding: "3px 10px",
-          }}>
+          <button
+            onClick={() => onSelect?.(s.id)}
+            disabled={!canGoToStep?.[s.id]}
+            style={{
+              display: "flex", alignItems: "center", gap: "4px",
+              background: i === idx ? B.orange : i < idx ? B.lightGreen : "rgba(255,255,255,0.15)",
+              borderRadius: "12px", padding: "3px 10px", border: "none",
+              opacity: canGoToStep?.[s.id] ? 1 : 0.55,
+              cursor: canGoToStep?.[s.id] ? "pointer" : "not-allowed",
+            }}
+            title={canGoToStep?.[s.id] ? `Ga naar ${s.l}` : `${s.l} is nog niet beschikbaar`}
+          >
             <span style={{ color: B.white, fontSize: "10px", fontWeight: 700 }}>{i + 1}</span>
             <span style={{ color: B.white, fontSize: "10px", display: i === idx ? "inline" : "none" }}>{s.l}</span>
-          </div>
+          </button>
           {i < 3 && <div style={{ width: "12px", height: "1px", background: "rgba(255,255,255,0.25)" }} />}
         </div>
       ))}

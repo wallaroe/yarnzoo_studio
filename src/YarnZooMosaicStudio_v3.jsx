@@ -424,6 +424,7 @@ export default function App() {
   const [colB, setColB] = useState({ name: "Arnhem", hex: "#C75050" });
   const [calcUnit, setCalcUnit] = useState("cm");
   const [calcIncludesEdges, setCalcIncludesEdges] = useState(true);
+  const [syncCalculatorToGrid, setSyncCalculatorToGrid] = useState(true);
   const [swatchWidth, setSwatchWidth] = useState(10);
   const [swatchHeight, setSwatchHeight] = useState(10);
   const [swatchStitches, setSwatchStitches] = useState(28);
@@ -521,6 +522,14 @@ export default function App() {
       }
     }
   }, [step, imgEl, gridW, gridH, threshold, colA, colB, projConfig.showEdges]);
+
+  useEffect(() => {
+    if (step !== "adjust" || !syncCalculatorToGrid || !calculatorResult) return;
+    const targetW = calculatorResult.targetPatternColumns;
+    const targetH = calculatorResult.calculatedRows;
+    if (gridW !== targetW) setGridW(targetW);
+    if (gridH !== targetH) setGridH(targetH);
+  }, [step, syncCalculatorToGrid, calculatorResult, gridW, gridH]);
 
   const confirmGrid = () => {
     const { chart: c, fixes } = imageToChart(imgEl, gridW, gridH, threshold);
@@ -646,11 +655,12 @@ export default function App() {
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                   <span style={lbl}>Breed:</span>
                   <input type="number" min={20} max={300} value={gridW} onChange={e => {
+                    setSyncCalculatorToGrid(false);
                     const v = parseInt(e.target.value) || 20; setGridW(v);
                     if (imgEl) setGridH(Math.round(v * (imgEl.height / imgEl.width)));
                   }} style={inp} />
                   <span style={lbl}>Hoog:</span>
-                  <input type="number" min={20} max={400} value={gridH} onChange={e => setGridH(parseInt(e.target.value) || 20)} style={inp} />
+                  <input type="number" min={20} max={400} value={gridH} onChange={e => { setSyncCalculatorToGrid(false); setGridH(parseInt(e.target.value) || 20); }} style={inp} />
                 </div>
               </Panel>
 
@@ -666,6 +676,10 @@ export default function App() {
                       <input type="checkbox" checked={calcIncludesEdges} onChange={e => setCalcIncludesEdges(e.target.checked)} />
                       Kolommen incl. kantsteken
                     </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: "#666", marginLeft: "6px" }}>
+                      <input type="checkbox" checked={syncCalculatorToGrid} onChange={e => setSyncCalculatorToGrid(e.target.checked)} />
+                      Auto-sync naar raster
+                    </label>
                   </div>
 
                   <div style={{ fontSize: "10px", fontWeight: 700, color: B.darkGreen, textTransform: "uppercase", letterSpacing: "1px" }}>
@@ -673,16 +687,16 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                     <span style={lbl}>Maat:</span>
-                    <input type="number" min="0" step="0.1" value={swatchWidth} onChange={e => setSwatchWidth(Math.max(0, parseFloat(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="0.1" value={swatchWidth} onChange={e => { setSyncCalculatorToGrid(true); setSwatchWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="0.1" value={swatchHeight} onChange={e => setSwatchHeight(Math.max(0, parseFloat(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="0.1" value={swatchHeight} onChange={e => { setSyncCalculatorToGrid(true); setSwatchHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
                   </div>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                     <span style={lbl}>Steken:</span>
-                    <input type="number" min="0" step="1" value={swatchStitches} onChange={e => setSwatchStitches(Math.max(0, parseInt(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="1" value={swatchStitches} onChange={e => { setSyncCalculatorToGrid(true); setSwatchStitches(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="1" value={swatchRows} onChange={e => setSwatchRows(Math.max(0, parseInt(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="1" value={swatchRows} onChange={e => { setSyncCalculatorToGrid(true); setSwatchRows(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>rijen</span>
                   </div>
 
@@ -691,9 +705,9 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                     <span style={lbl}>Maat:</span>
-                    <input type="number" min="0" step="0.1" value={desiredWidth} onChange={e => setDesiredWidth(Math.max(0, parseFloat(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="0.1" value={desiredWidth} onChange={e => { setSyncCalculatorToGrid(true); setDesiredWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="0.1" value={desiredHeight} onChange={e => setDesiredHeight(Math.max(0, parseFloat(e.target.value) || 0))} style={inp} />
+                    <input type="number" min="0" step="0.1" value={desiredHeight} onChange={e => { setSyncCalculatorToGrid(true); setDesiredHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
                     <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
                   </div>
 

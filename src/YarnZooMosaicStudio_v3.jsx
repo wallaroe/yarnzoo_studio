@@ -51,6 +51,136 @@ const DEFAULT_FOLDERS = [
   { id: DELETED_FOLDER_ID, name: "Verwijderde charts", system: true },
 ];
 
+const PAPER_SIZES_MM = {
+  A4: { w: 210, h: 297 },
+  A3: { w: 297, h: 420 },
+  Letter: { w: 216, h: 279 },
+};
+
+const COLOR_PALETTE_STORAGE_KEY = "yarnzoo_color_palette_v1";
+
+const DEFAULT_YARN_PALETTE = [
+  { name: "Zandvoort", hex: "#E8DCC8", brand: "YarnZoo", line: "Mosaic", code: "A01", locked: true },
+  { name: "Arnhem", hex: "#C75050", brand: "YarnZoo", line: "Mosaic", code: "B01", locked: true },
+  { name: "Leiden", hex: "#D9A441", brand: "YarnZoo", line: "Mosaic", code: "A02", locked: true },
+  { name: "Gouda", hex: "#9C6B3F", brand: "YarnZoo", line: "Mosaic", code: "B02", locked: true },
+  { name: "Delft", hex: "#5872A8", brand: "YarnZoo", line: "Mosaic", code: "A03", locked: true },
+  { name: "Utrecht", hex: "#324E7B", brand: "YarnZoo", line: "Mosaic", code: "B03", locked: true },
+  { name: "Haarlem", hex: "#7FA36B", brand: "YarnZoo", line: "Mosaic", code: "A04", locked: true },
+  { name: "Maastricht", hex: "#4A6D53", brand: "YarnZoo", line: "Mosaic", code: "B04", locked: true },
+];
+const DEFAULT_COLOR_A = { name: DEFAULT_YARN_PALETTE[0].name, hex: DEFAULT_YARN_PALETTE[0].hex };
+const DEFAULT_COLOR_B = { name: DEFAULT_YARN_PALETTE[1].name, hex: DEFAULT_YARN_PALETTE[1].hex };
+
+const DEFAULT_PATTERN_TEXTS = {
+  nl: {
+    label: "Nederlands",
+    rowWord: "Rij",
+    termSc: "vaste",
+    termDc: "stokje",
+    edgeATemplate: "kantsteek A ({color})",
+    edgeBTemplate: "kantsteek B ({color})",
+    rowLineTemplate: "{rowWord} {rowNum}: ({edge}), {stitches}, ({edge})",
+    headerTitle: "HAAKPATROON - Overlay Mozaiek",
+    dimensionsTemplate: "Afmetingen: {w} steken breed x {h} rijen hoog",
+    directionLabel: "Telrichting",
+    directionRtoL: "Rechts naar links (←)",
+    directionLtoR: "Links naar rechts (→)",
+    colorsTitle: "Kleuren:",
+    colorAInfoTemplate: "{name} (kleur A): oneven rijen",
+    colorBInfoTemplate: "{name} (kleur B): even rijen",
+    stitchesTitle: "Steken:",
+    scInfo: "vaste = vaste in de achterste lus",
+    dcInfo: "stokje = stokje in de voorste lus, 2 rijen lager",
+    edgeInfo: "kantsteek A/B = begin- en eindsteek van de rij",
+    startLine1Template: "Start: maak met {name} een lossenketting van {chainCount} lossen,",
+    startLine2Template: "start in de 2e losse vanaf de haaknaald met in elke losse een vaste [{stitchCount}]. Hecht af.",
+    writtenTitle: "GESCHREVEN TEKST",
+    colorsLabelInline: "Kleuren",
+    directionLabelInline: "Richting",
+    startLabelInline: "Start",
+    startInlineTemplate: "Start met {name}, lossenketting van {chainCount} lossen, start in de 2e losse met in elke losse een vaste [{stitchCount}]. Hecht af.",
+    fileName: "haakpatroon_nl",
+  },
+  en: {
+    label: "English",
+    rowWord: "Row",
+    termSc: "single crochet",
+    termDc: "double crochet",
+    edgeATemplate: "edge stitch A ({color})",
+    edgeBTemplate: "edge stitch B ({color})",
+    rowLineTemplate: "{rowWord} {rowNum}: ({edge}), {stitches}, ({edge})",
+    headerTitle: "CROCHET PATTERN - Overlay Mosaic",
+    dimensionsTemplate: "Size: {w} stitches wide x {h} rows high",
+    directionLabel: "Reading direction",
+    directionRtoL: "Right to left (←)",
+    directionLtoR: "Left to right (→)",
+    colorsTitle: "Colors:",
+    colorAInfoTemplate: "{name} (color A): odd rows",
+    colorBInfoTemplate: "{name} (color B): even rows",
+    stitchesTitle: "Stitches:",
+    scInfo: "single crochet = worked in back loop",
+    dcInfo: "double crochet = worked in front loop, 2 rows below",
+    edgeInfo: "edge stitch A/B = first and last stitch of the row",
+    startLine1Template: "Start: with {name}, make a foundation chain of {chainCount} chains,",
+    startLine2Template: "start in the 2nd chain from hook and work single crochet across [{stitchCount}]. Fasten off.",
+    writtenTitle: "WRITTEN PATTERN",
+    colorsLabelInline: "Colors",
+    directionLabelInline: "Direction",
+    startLabelInline: "Start",
+    startInlineTemplate: "Start with {name}, chain {chainCount}, begin in the 2nd chain and work single crochet in each chain [{stitchCount}]. Fasten off.",
+    fileName: "crochet_pattern_en",
+  },
+  de: {
+    label: "Deutsch",
+    rowWord: "Reihe",
+    termSc: "feste Masche",
+    termDc: "Staebchen",
+    edgeATemplate: "Randmasche A ({color})",
+    edgeBTemplate: "Randmasche B ({color})",
+    rowLineTemplate: "{rowWord} {rowNum}: ({edge}), {stitches}, ({edge})",
+    headerTitle: "HAEKELMUSTER - Overlay Mosaik",
+    dimensionsTemplate: "Groesse: {w} Maschen breit x {h} Reihen hoch",
+    directionLabel: "Leserichtung",
+    directionRtoL: "Rechts nach links (←)",
+    directionLtoR: "Links nach rechts (→)",
+    colorsTitle: "Farben:",
+    colorAInfoTemplate: "{name} (Farbe A): ungerade Reihen",
+    colorBInfoTemplate: "{name} (Farbe B): gerade Reihen",
+    stitchesTitle: "Maschen:",
+    scInfo: "feste Masche = in das hintere Maschenglied",
+    dcInfo: "Staebchen = in das vordere Maschenglied, 2 Reihen tiefer",
+    edgeInfo: "Randmasche A/B = erste und letzte Masche der Reihe",
+    startLine1Template: "Start: mit {name} eine Luftmaschenkette von {chainCount} Luftmaschen,",
+    startLine2Template: "in die 2. Luftmasche ab Nadel einstechen und feste Maschen ueber die Reihe [{stitchCount}]. Faden abschneiden.",
+    writtenTitle: "AUSGESCHRIEBENES MUSTER",
+    colorsLabelInline: "Farben",
+    directionLabelInline: "Richtung",
+    startLabelInline: "Start",
+    startInlineTemplate: "Start mit {name}, Luftmaschenkette mit {chainCount} Luftmaschen, ab der 2. Luftmasche feste Maschen [{stitchCount}]. Faden abschneiden.",
+    fileName: "haekelmuster_de",
+  },
+};
+
+const TRANSLATION_STORAGE_KEY = "yarnzoo_pattern_translations_v1";
+const GLOBAL_TRANSLATIONS_TABLE = "app_translations";
+const GLOBAL_TRANSLATIONS_ID = "pattern_texts";
+
+const TRANSLATION_FIELDS = [
+  { key: "label", term: "Taalnaam" },
+  { key: "rowWord", term: "Rij / Row" },
+  { key: "termSc", term: "Vaste" },
+  { key: "termDc", term: "Stokje" },
+  { key: "edgeATemplate", term: "Kantsteek A" },
+  { key: "edgeBTemplate", term: "Kantsteek B" },
+  { key: "rowLineTemplate", term: "Regel template" },
+  { key: "directionRtoL", term: "Richting R->L" },
+  { key: "directionLtoR", term: "Richting L->R" },
+  { key: "colorAInfoTemplate", term: "Kleur A uitleg" },
+  { key: "colorBInfoTemplate", term: "Kleur B uitleg" },
+  { key: "writtenTitle", term: "Sectietitel" },
+];
+
 function loadWorkspace() {
   if (typeof window === "undefined") {
     return { folders: DEFAULT_FOLDERS, charts: [] };
@@ -77,8 +207,413 @@ function saveWorkspace(folders, charts) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ folders, charts }));
 }
 
+function normalizeHexColor(value) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9A-Fa-f]{3}$/.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toUpperCase();
+  }
+  if (/^#[0-9A-Fa-f]{6}$/.test(raw)) return raw.toUpperCase();
+  return null;
+}
+
+function normalizePaletteEntry(entry, fallbackIndex = 0) {
+  if (!entry || typeof entry !== "object") return null;
+  const hex = normalizeHexColor(entry.hex);
+  if (!hex) return null;
+  const name = String(entry.name || "").trim() || `Kleur ${fallbackIndex + 1}`;
+  return {
+    name,
+    hex,
+    brand: String(entry.brand || "").trim(),
+    line: String(entry.line || "").trim(),
+    code: String(entry.code || "").trim(),
+    locked: !!entry.locked,
+  };
+}
+
+function loadColorPalette() {
+  const defaults = DEFAULT_YARN_PALETTE
+    .map((entry, idx) => normalizePaletteEntry({ ...entry, locked: true }, idx))
+    .filter(Boolean);
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = localStorage.getItem(COLOR_PALETTE_STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : [];
+    const normalizedStored = list
+      .map((entry, idx) => normalizePaletteEntry({ ...entry, locked: false }, idx))
+      .filter(Boolean);
+    const lockedNames = new Set(defaults.map(entry => entry.name.toLowerCase()));
+    const lockedHexes = new Set(defaults.map(entry => entry.hex.toUpperCase()));
+    const customByName = new Map();
+
+    for (const entry of normalizedStored) {
+      const nameKey = entry.name.toLowerCase();
+      const hexKey = entry.hex.toUpperCase();
+      if (lockedNames.has(nameKey) || lockedHexes.has(hexKey)) continue;
+      customByName.set(nameKey, { ...entry, locked: false });
+    }
+
+    return [...defaults, ...Array.from(customByName.values())];
+  } catch {
+    return defaults;
+  }
+}
+
+function saveColorPalette(palette) {
+  if (typeof window === "undefined") return;
+  try {
+    const persist = (Array.isArray(palette) ? palette : [])
+      .filter(entry => !entry?.locked)
+      .map(({ name, hex, brand, line, code }) => ({ name, hex, brand, line, code, locked: false }));
+    localStorage.setItem(COLOR_PALETTE_STORAGE_KEY, JSON.stringify(persist));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function normalizeActiveColor(color, fallback) {
+  if (!color || typeof color !== "object") return { ...fallback };
+  return {
+    name: String(color.name || "").trim() || fallback.name,
+    hex: normalizeHexColor(color.hex) || fallback.hex,
+  };
+}
+
+function upsertPaletteWithColor(prevPalette, color) {
+  const normalized = normalizePaletteEntry(color, prevPalette.length);
+  if (!normalized) return prevPalette;
+
+  const next = [...prevPalette];
+  const sameNameIdx = next.findIndex(entry => entry.name.trim().toLowerCase() === normalized.name.trim().toLowerCase());
+  const sameHexIdx = next.findIndex(entry => entry.hex.toUpperCase() === normalized.hex.toUpperCase());
+  const targetIdx = sameNameIdx >= 0 ? sameNameIdx : sameHexIdx;
+
+  if (targetIdx >= 0) {
+    if (next[targetIdx].locked) return prevPalette;
+    next[targetIdx] = { ...next[targetIdx], ...normalized, locked: false };
+  } else {
+    next.push({ ...normalized, locked: false });
+  }
+
+  return next;
+}
+
 function withinRestoreWindow(chart) {
   return !!(chart?.isDeleted && chart?.deletedAt && (Date.now() - new Date(chart.deletedAt).getTime() <= ONE_WEEK_MS));
+}
+
+function templateText(template, vars = {}) {
+  return String(template || "").replace(/\{(\w+)\}/g, (_m, key) => (vars[key] ?? ""));
+}
+
+function normalizePatternTexts(raw) {
+  const baseNl = DEFAULT_PATTERN_TEXTS.nl;
+  const normalized = {};
+
+  for (const [lang, preset] of Object.entries(DEFAULT_PATTERN_TEXTS)) {
+    normalized[lang] = { ...baseNl, ...preset, label: preset.label || lang };
+  }
+
+  if (!raw || typeof raw !== "object") return normalized;
+
+  for (const [lang, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object") continue;
+    const cleanLang = String(lang).trim().toLowerCase();
+    if (!cleanLang) continue;
+    normalized[cleanLang] = {
+      ...baseNl,
+      ...(normalized[cleanLang] || {}),
+      ...value,
+      label: value.label || normalized[cleanLang]?.label || cleanLang.toUpperCase(),
+    };
+  }
+
+  return normalized;
+}
+
+function loadTranslationConfig() {
+  if (typeof window === "undefined") return { texts: normalizePatternTexts(null), locked: true };
+  try {
+    const raw = localStorage.getItem(TRANSLATION_STORAGE_KEY);
+    if (!raw) return { texts: normalizePatternTexts(null), locked: true };
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && parsed.texts) {
+      return {
+        texts: normalizePatternTexts(parsed.texts),
+        locked: typeof parsed.locked === "boolean" ? parsed.locked : true,
+      };
+    }
+    // Backward compatibility with older format storing only texts
+    return { texts: normalizePatternTexts(parsed), locked: true };
+  } catch {
+    return { texts: normalizePatternTexts(null), locked: true };
+  }
+}
+
+function saveTranslationConfig(texts, locked) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TRANSLATION_STORAGE_KEY, JSON.stringify({ texts, locked }));
+  } catch {
+    // ignore quota/storage errors
+  }
+}
+
+function resolvePaperSizeMm(paper, orientation) {
+  const base = PAPER_SIZES_MM[paper] || PAPER_SIZES_MM.A4;
+  if (orientation === "landscape") {
+    return { w: base.h, h: base.w };
+  }
+  return base;
+}
+
+function computePrintLayout({ chartWidth, chartHeight, showEdges, paper, orientation, marginMm, mode, cellMm }) {
+  const totalCols = chartWidth + (showEdges ? 2 : 0);
+  const paperSize = resolvePaperSizeMm(paper, orientation);
+  const safeMargin = Math.max(3, Number(marginMm) || 0);
+  const printableWmm = Math.max(40, paperSize.w - safeMargin * 2);
+  const printableHmm = Math.max(40, paperSize.h - safeMargin * 2);
+
+  if (mode === "single") {
+    const effectiveCellMm = Math.max(0.8, Math.min(printableWmm / totalCols, printableHmm / chartHeight));
+    return {
+      totalCols,
+      rowsPerPage: chartHeight,
+      colsPerPage: totalCols,
+      pagesX: 1,
+      pagesY: 1,
+      totalPages: 1,
+      cellMm: effectiveCellMm,
+      printableWmm,
+      printableHmm,
+      marginMm: safeMargin,
+    };
+  }
+
+  const effectiveCellMm = Math.max(1.2, Number(cellMm) || 3.2);
+  const colsPerPage = Math.max(1, Math.floor(printableWmm / effectiveCellMm));
+  const rowsPerPage = Math.max(1, Math.floor(printableHmm / effectiveCellMm));
+  const pagesX = Math.max(1, Math.ceil(totalCols / colsPerPage));
+  const pagesY = Math.max(1, Math.ceil(chartHeight / rowsPerPage));
+
+  return {
+    totalCols,
+    rowsPerPage,
+    colsPerPage,
+    pagesX,
+    pagesY,
+    totalPages: pagesX * pagesY,
+    cellMm: effectiveCellMm,
+    printableWmm,
+    printableHmm,
+    marginMm: safeMargin,
+  };
+}
+
+function buildPrintPageImage({
+  chart,
+  colA,
+  colB,
+  config,
+  layout,
+  pageX,
+  pageY,
+  dpi = 180,
+}) {
+  const w = chart[0].length;
+  const h = chart.length;
+  const xOffset = config.showEdges ? 1 : 0;
+
+  const startCol = pageX * layout.colsPerPage;
+  const endCol = Math.min(layout.totalCols, startCol + layout.colsPerPage);
+  const startRow = pageY * layout.rowsPerPage;
+  const endRow = Math.min(h, startRow + layout.rowsPerPage);
+
+  const visibleCols = endCol - startCol;
+  const visibleRows = endRow - startRow;
+  const pxPerMm = dpi / 25.4;
+  const cellPx = Math.max(4, layout.cellMm * pxPerMm);
+
+  const rowDigits = String(h).length;
+  const colDigits = String(layout.totalCols).length;
+  const rowFontPx = Math.max(9, Math.min(16, cellPx * 0.54));
+  const colFontPx = Math.max(8, Math.min(14, cellPx * 0.48));
+  const marginLeft = Math.ceil(16 + rowDigits * (rowFontPx * 0.7));
+  const marginRight = marginLeft;
+  const marginTop = Math.ceil(14 + colFontPx * 1.5);
+  const marginBottom = Math.ceil(16 + colFontPx * 1.7);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(visibleCols * cellPx + marginLeft + marginRight);
+  canvas.height = Math.ceil(visibleRows * cellPx + marginTop + marginBottom);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.translate(marginLeft, marginTop);
+
+  const cellBounds = (gx, gy) => ({
+    x: (gx - startCol) * cellPx,
+    y: (gy - startRow) * cellPx,
+  });
+
+  const getRowHex = (globalY) => {
+    const rowNum = h - globalY;
+    const colorIdx = getRowColor(rowNum - 1);
+    return colorIdx === 0 ? colA.hex : colB.hex;
+  };
+
+  const getFinalCellColor = (globalX, globalY) => {
+    const rowHex = getRowHex(globalY);
+    if (!config.showEdges || (globalX !== 0 && globalX !== layout.totalCols - 1)) {
+      if (globalX >= xOffset && globalX < xOffset + w && globalY > 0) {
+        const patternX = globalX - xOffset;
+        if (chart[globalY - 1][patternX]) {
+          return getRowHex(globalY - 1);
+        }
+      }
+    }
+    return rowHex;
+  };
+
+  for (let gy = startRow; gy < endRow; gy++) {
+    for (let gx = startCol; gx < endCol; gx++) {
+      const { x, y } = cellBounds(gx, gy);
+      ctx.fillStyle = getFinalCellColor(gx, gy);
+      ctx.fillRect(x, y, cellPx, cellPx);
+    }
+  }
+
+  for (let gy = startRow; gy < endRow; gy++) {
+    for (let gx = startCol; gx < endCol; gx++) {
+      if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) {
+        const { x, y } = cellBounds(gx, gy);
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(x + cellPx / 2, y + cellPx / 2, Math.max(1.5, cellPx * 0.16), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  ctx.fillStyle = "#1f1f1f";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${Math.max(6, cellPx * 0.46)}px monospace`;
+  for (let gy = startRow; gy < endRow; gy++) {
+    for (let gx = startCol; gx < endCol; gx++) {
+      if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
+      const patternX = gx - xOffset;
+      if (patternX < 0 || patternX >= w) continue;
+      if (!chart[gy][patternX]) continue;
+      const { x, y } = cellBounds(gx, gy);
+      ctx.fillText("F", x + cellPx / 2, y + cellPx / 2 + cellPx * 0.03);
+    }
+  }
+
+  ctx.strokeStyle = "rgba(0,0,0,0.18)";
+  ctx.lineWidth = Math.max(0.6, cellPx * 0.03);
+  for (let x = 0; x <= visibleCols; x++) {
+    const px = x * cellPx;
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, visibleRows * cellPx);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= visibleRows; y++) {
+    const py = y * cellPx;
+    ctx.beginPath();
+    ctx.moveTo(0, py);
+    ctx.lineTo(visibleCols * cellPx, py);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = Math.max(1, cellPx * 0.06);
+  if (config.direction === "RtoL") {
+    for (let i = 0; i <= w; i += 10) {
+      const globalX = xOffset + (w - i);
+      if (globalX < startCol || globalX > endCol) continue;
+      const px = (globalX - startCol) * cellPx;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, visibleRows * cellPx);
+      ctx.stroke();
+    }
+  } else {
+    for (let i = 0; i <= w; i += 10) {
+      const globalX = xOffset + i;
+      if (globalX < startCol || globalX > endCol) continue;
+      const px = (globalX - startCol) * cellPx;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, visibleRows * cellPx);
+      ctx.stroke();
+    }
+  }
+  for (let i = 0; i <= h; i += 10) {
+    const globalY = h - i;
+    if (globalY < startRow || globalY > endRow) continue;
+    const py = (globalY - startRow) * cellPx;
+    ctx.beginPath();
+    ctx.moveTo(0, py);
+    ctx.lineTo(visibleCols * cellPx, py);
+    ctx.stroke();
+  }
+
+  if (config.showEdges) {
+    const leftSep = xOffset;
+    const rightSep = layout.totalCols - 1;
+    if (leftSep >= startCol && leftSep <= endCol) {
+      const px = (leftSep - startCol) * cellPx;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, visibleRows * cellPx);
+      ctx.stroke();
+    }
+    if (rightSep >= startCol && rightSep <= endCol) {
+      const px = (rightSep - startCol) * cellPx;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, visibleRows * cellPx);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = "#666";
+  ctx.font = `${rowFontPx}px monospace`;
+  ctx.textBaseline = "middle";
+  for (let gy = startRow; gy < endRow; gy++) {
+    const rowNum = h - gy;
+    const y = (gy - startRow) * cellPx + cellPx / 2;
+    ctx.textAlign = "right";
+    ctx.fillText(`${rowNum}`, -8, y);
+    ctx.textAlign = "left";
+    ctx.fillText(`${rowNum}`, visibleCols * cellPx + 8, y);
+  }
+
+  ctx.fillStyle = "#666";
+  ctx.font = `${colFontPx}px monospace`;
+  ctx.textAlign = "center";
+  for (let gx = startCol; gx < endCol; gx++) {
+    const colNum = config.direction === "RtoL" ? layout.totalCols - gx : gx + 1;
+    const x = (gx - startCol) * cellPx + cellPx / 2;
+    ctx.textBaseline = "top";
+    ctx.fillText(`${colNum}`, x, visibleRows * cellPx + 6);
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`${colNum}`, x, -6);
+  }
+
+  return {
+    dataUrl: canvas.toDataURL("image/png"),
+    widthMm: canvas.width / pxPerMm,
+    heightMm: canvas.height / pxPerMm,
+    startCol,
+    endCol,
+    startRow,
+    endRow,
+  };
 }
 
 /*
@@ -219,15 +754,18 @@ function imageToChart(img, targetW, targetH, threshold) {
 // ============================================================
 // Pattern Generation
 // ============================================================
-function generateWrittenPattern(chart, colA, colB, direction = "RtoL") {
+function generateWrittenPattern(chart, colA, colB, direction = "RtoL", textSet = DEFAULT_PATTERN_TEXTS.nl) {
   const h = chart.length, w = chart[0].length;
   const rows = [];
+  const t = textSet || DEFAULT_PATTERN_TEXTS.nl;
 
   for (let rowNum = 1; rowNum <= h; rowNum++) {
     // Row 1 is bottom of chart = chart[h-1]
     const chartY = h - rowNum;
     const colorIdx = getRowColor(rowNum - 1);
-    const colorName = colorIdx === 0 ? colA.name : colB.name;
+    const edgeLabel = colorIdx === 0
+      ? templateText(t.edgeATemplate, { color: colA.name })
+      : templateText(t.edgeBTemplate, { color: colB.name });
 
     // Build stitch groups based on direction
     const indices = [];
@@ -244,7 +782,7 @@ function generateWrittenPattern(chart, colA, colB, direction = "RtoL") {
 
     for (let x of indices) {
       const hasSymbol = chart[chartY][x];
-      const stType = hasSymbol ? "stk" : "v";
+      const stType = hasSymbol ? t.termDc : t.termSc;
 
       if (stType === curType) {
         count++;
@@ -260,7 +798,12 @@ function generateWrittenPattern(chart, colA, colB, direction = "RtoL") {
       .map(s => s.c === 1 ? `(${s.t})` : `(${s.t}) x ${s.c}`)
       .join(", ");
 
-    rows.push(`Rij ${rowNum}: (KS ${colorName}), ${stitchStr}, (KS ${colorName})`);
+    rows.push(templateText(t.rowLineTemplate, {
+      rowWord: t.rowWord,
+      rowNum,
+      edge: edgeLabel,
+      stitches: stitchStr,
+    }));
   }
 
   return rows;
@@ -608,8 +1151,9 @@ export default function App() {
   const [fixCount, setFixCount] = useState(0);
   const [tool, setTool] = useState("toggle");
   const [cellSize, setCellSize] = useState(4);
-  const [colA, setColA] = useState({ name: "Zandvoort", hex: "#E8DCC8" });
-  const [colB, setColB] = useState({ name: "Arnhem", hex: "#C75050" });
+  const [yarnPalette, setYarnPalette] = useState(() => loadColorPalette());
+  const [colA, setColA] = useState({ ...DEFAULT_COLOR_A });
+  const [colB, setColB] = useState({ ...DEFAULT_COLOR_B });
   const [calcUnit, setCalcUnit] = useState("cm");
   const [calcIncludesEdges, setCalcIncludesEdges] = useState(true);
   const [syncCalculatorToGrid, setSyncCalculatorToGrid] = useState(true);
@@ -635,6 +1179,23 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 1024 : false));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ruleNotice, setRuleNotice] = useState("");
+  const [printPaper, setPrintPaper] = useState("A4");
+  const [printOrientation, setPrintOrientation] = useState("portrait");
+  const [printMode, setPrintMode] = useState("multi");
+  const [printMarginMm, setPrintMarginMm] = useState(8);
+  const [printCellMm, setPrintCellMm] = useState(3.2);
+  const [patternLanguage, setPatternLanguage] = useState("nl");
+  const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
+  const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
+  const [newLanguageCode, setNewLanguageCode] = useState("");
+  const [newLanguageLabel, setNewLanguageLabel] = useState("");
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [translationsRemoteReady, setTranslationsRemoteReady] = useState(!hasSupabaseConfig);
+  const [isHydratingTranslations, setIsHydratingTranslations] = useState(false);
+  const [translationCloudStatus, setTranslationCloudStatus] = useState(hasSupabaseConfig ? "loading" : "local");
   const ruleNoticeTimer = useRef(null);
 
   // Project Settings
@@ -662,6 +1223,13 @@ export default function App() {
     cloud_error: "#C63713",
     setup_needed: "#C63713",
   }[cloudSyncState] || "#9FA3A7";
+  const translationCloudLabel = {
+    local: "Lokaal",
+    loading: "Laadt",
+    cloud: "Globaal in cloud",
+    setup_needed: "Setup nodig",
+    error: "Cloud fout",
+  }[translationCloudStatus] || "Onbekend";
 
   const showRuleNotice = useCallback((message) => {
     if (!message) return;
@@ -690,9 +1258,200 @@ export default function App() {
     return fixes;
   }, [showRuleNotice]);
 
+  const languageEntries = Object.entries(patternTexts);
+  const applyPaletteColor = useCallback((entry, setColor, fallback) => {
+    if (!entry) return;
+    setColor(normalizeActiveColor(entry, fallback));
+  }, []);
+
+  const saveColorToPalette = useCallback((color) => {
+    const normalized = normalizePaletteEntry(color, 0);
+    if (!normalized) {
+      alert("Kies een geldige kleurcode (#RRGGBB) om op te slaan in het palet.");
+      return;
+    }
+    const lockedConflict = yarnPalette.find((entry) =>
+      entry.locked && entry.name.toLowerCase() === normalized.name.toLowerCase() && entry.hex !== normalized.hex,
+    );
+    if (lockedConflict) {
+      alert(`'${lockedConflict.name}' is een basispalet-kleur en kan niet overschreven worden.`);
+      return;
+    }
+    setYarnPalette(prev => upsertPaletteWithColor(prev, normalized));
+  }, [yarnPalette]);
+
+  const renamePaletteEntry = useCallback((index) => {
+    const entry = yarnPalette[index];
+    if (!entry) return;
+    if (entry.locked) {
+      alert("Basispalet-kleuren zijn vergrendeld en kunnen niet hernoemd worden.");
+      return;
+    }
+    const nextName = window.prompt("Nieuwe kleurnaam", entry.name);
+    if (!nextName || !nextName.trim()) return;
+    const cleanName = nextName.trim();
+    const duplicate = yarnPalette.some((item, itemIdx) => itemIdx !== index && item.name.toLowerCase() === cleanName.toLowerCase());
+    if (duplicate) {
+      alert("Er bestaat al een kleur met deze naam.");
+      return;
+    }
+    setYarnPalette(prev => {
+      if (!prev[index] || prev[index].locked) return prev;
+      const next = [...prev];
+      next[index] = { ...next[index], name: cleanName, locked: false };
+      return next;
+    });
+  }, [yarnPalette]);
+
+  const removePaletteEntry = useCallback((index) => {
+    const entry = yarnPalette[index];
+    if (!entry) return;
+    if (entry.locked) {
+      alert("Basispalet-kleuren zijn vergrendeld en kunnen niet verwijderd worden.");
+      return;
+    }
+    if (!window.confirm(`Kleur '${entry.name}' verwijderen uit palet?`)) return;
+    setYarnPalette(prev => prev.filter((_item, itemIdx) => itemIdx !== index));
+  }, [yarnPalette]);
+
+  const resetCustomPalette = useCallback(() => {
+    if (!window.confirm("Alle aangepaste paletkleuren verwijderen en alleen basispalet behouden?")) return;
+    setYarnPalette(DEFAULT_YARN_PALETTE.map((entry, idx) => normalizePaletteEntry({ ...entry, locked: true }, idx)).filter(Boolean));
+  }, []);
+
+  const updateTranslationValue = useCallback((lang, field, value) => {
+    if (translationsLocked) return;
+    setPatternTexts(prev => ({
+      ...prev,
+      [lang]: {
+        ...(prev[lang] || normalizePatternTexts(null).nl),
+        [field]: value,
+      },
+    }));
+  }, [translationsLocked]);
+
+  const addTranslationLanguage = useCallback(() => {
+    if (translationsLocked) return;
+    const code = newLanguageCode.trim().toLowerCase();
+    if (!code.match(/^[a-z]{2,5}$/)) {
+      alert("Gebruik een taalcode met 2-5 letters, bijvoorbeeld: fr, es, it.");
+      return;
+    }
+    if (patternTexts[code]) {
+      alert("Deze taalcode bestaat al.");
+      return;
+    }
+    const label = newLanguageLabel.trim() || code.toUpperCase();
+    setPatternTexts(prev => ({
+      ...prev,
+      [code]: { ...normalizePatternTexts(null).nl, label },
+    }));
+    setPatternLanguage(code);
+    setNewLanguageCode("");
+    setNewLanguageLabel("");
+  }, [newLanguageCode, newLanguageLabel, patternTexts]);
+
+  const removeTranslationLanguage = useCallback((lang) => {
+    if (translationsLocked) return;
+    if (lang === "nl") {
+      alert("Nederlands is de fallback en kan niet verwijderd worden.");
+      return;
+    }
+    if (!window.confirm(`Taal '${lang}' verwijderen?`)) return;
+    setPatternTexts(prev => {
+      const next = { ...prev };
+      delete next[lang];
+      return next;
+    });
+    if (patternLanguage === lang) setPatternLanguage("nl");
+  }, [patternLanguage, translationsLocked]);
+
+  const toggleTranslationsLock = useCallback(() => {
+    if (translationsLocked && hasSupabaseConfig && !user) {
+      alert("Log in om de globale vertaaltabel te bewerken.");
+      return;
+    }
+    setTranslationsLocked(prev => !prev);
+  }, [translationsLocked, user]);
+
+  const resetTranslationsToDefault = useCallback(() => {
+    if (translationsLocked) return;
+    if (!window.confirm("Alle aangepaste vertalingen terugzetten naar de standaard?")) return;
+    setPatternTexts(normalizePatternTexts(null));
+    setPatternLanguage("nl");
+    setTranslationsLocked(true);
+  }, [translationsLocked]);
+
   useEffect(() => () => {
     if (ruleNoticeTimer.current) clearTimeout(ruleNoticeTimer.current);
   }, []);
+
+  useEffect(() => {
+    saveColorPalette(yarnPalette);
+  }, [yarnPalette]);
+
+  useEffect(() => {
+    saveTranslationConfig(patternTexts, translationsLocked);
+  }, [patternTexts, translationsLocked]);
+
+  useEffect(() => {
+    if (!patternTexts[patternLanguage]) setPatternLanguage("nl");
+  }, [patternTexts, patternLanguage]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase || !authReady) return;
+    let active = true;
+    const loadRemoteTranslations = async () => {
+      setIsHydratingTranslations(true);
+      const { data, error } = await supabase
+        .from(GLOBAL_TRANSLATIONS_TABLE)
+        .select("texts, locked")
+        .eq("id", GLOBAL_TRANSLATIONS_ID)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        if (error.code === "42P01") {
+          setTranslationCloudStatus("setup_needed");
+        } else {
+          setTranslationCloudStatus("error");
+        }
+      } else {
+        if (data?.texts) {
+          setPatternTexts(normalizePatternTexts(data.texts));
+          if (typeof data.locked === "boolean") setTranslationsLocked(data.locked);
+        }
+        setTranslationCloudStatus("cloud");
+      }
+      setTranslationsRemoteReady(true);
+      setIsHydratingTranslations(false);
+    };
+    loadRemoteTranslations();
+    return () => { active = false; };
+  }, [authReady, user]);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase || !authReady || !translationsRemoteReady || isHydratingTranslations) return;
+    if (!user) return;
+    const timer = setTimeout(async () => {
+      const { error } = await supabase
+        .from(GLOBAL_TRANSLATIONS_TABLE)
+        .upsert({
+          id: GLOBAL_TRANSLATIONS_ID,
+          texts: patternTexts,
+          locked: translationsLocked,
+          updated_at: new Date().toISOString(),
+          updated_by: user.id,
+        });
+      if (error) {
+        if (error.code === "42P01") setTranslationCloudStatus("setup_needed");
+        else setTranslationCloudStatus("error");
+      } else {
+        setTranslationCloudStatus("cloud");
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [patternTexts, translationsLocked, user, authReady, translationsRemoteReady, isHydratingTranslations]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -908,8 +1667,8 @@ export default function App() {
       setFixCount(0);
     }
     setCellSize(nextRecord.cellSize || 4);
-    setColA(nextRecord.colA || { name: "Zandvoort", hex: "#E8DCC8" });
-    setColB(nextRecord.colB || { name: "Arnhem", hex: "#C75050" });
+    setColA(normalizeActiveColor(nextRecord.colA, DEFAULT_COLOR_A));
+    setColB(normalizeActiveColor(nextRecord.colB, DEFAULT_COLOR_B));
     setProjConfig(nextRecord.projConfig || { direction: "RtoL", showEdges: true });
     setCalcUnit(nextRecord.calcUnit || "cm");
     setCalcIncludesEdges(typeof nextRecord.calcIncludesEdges === "boolean" ? nextRecord.calcIncludesEdges : true);
@@ -972,13 +1731,57 @@ export default function App() {
     if (chartFolderId === folderId) setChartFolderId(DEFAULT_FOLDER_ID);
   };
 
-  const signInWithGitHub = async () => {
+  const signInWithEmailPassword = async () => {
     if (!supabase) return;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) alert("Inloggen via GitHub is mislukt.");
+    const email = authEmail.trim();
+    const password = authPassword;
+    if (!email || !password) {
+      alert("Vul e-mailadres en wachtwoord in.");
+      return;
+    }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setAuthBusy(false);
+    if (error) {
+      if (error.message?.toLowerCase().includes("invalid login credentials")) {
+        alert("Onjuiste inloggegevens.");
+      } else {
+        alert(`Inloggen mislukt: ${error.message}`);
+      }
+      return;
+    }
+    setOpenMenu("");
+    setAuthPassword("");
+    setCloudSyncState("syncing");
+  };
+
+  const signUpWithEmailPassword = async () => {
+    if (!supabase) return;
+    const email = authEmail.trim();
+    const password = authPassword;
+    if (!email || !password) {
+      alert("Vul e-mailadres en wachtwoord in.");
+      return;
+    }
+    if (password.length < 6) {
+      alert("Wachtwoord moet minimaal 6 tekens bevatten.");
+      return;
+    }
+    setAuthBusy(true);
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    setAuthBusy(false);
+    if (error) {
+      alert(`Registreren mislukt: ${error.message}`);
+      return;
+    }
+    setAuthPassword("");
+    if (data?.session) {
+      setOpenMenu("");
+      setCloudSyncState("syncing");
+      return;
+    }
+    alert("Account aangemaakt. Controleer je e-mail voor bevestiging en log daarna in.");
+    setAuthMode("signin");
   };
 
   const signOutUser = async () => {
@@ -1108,7 +1911,20 @@ export default function App() {
     setGridH(calculatorResult.calculatedRows);
   };
 
-  const patternRows = chart ? generateWrittenPattern(chart, colA, colB, projConfig.direction) : [];
+  const patternText = patternTexts[patternLanguage] || patternTexts.nl || normalizePatternTexts(null).nl;
+  const patternRows = chart ? generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText) : [];
+  const printLayout = chart
+    ? computePrintLayout({
+      chartWidth: chart[0].length,
+      chartHeight: chart.length,
+      showEdges: projConfig.showEdges,
+      paper: printPaper,
+      orientation: printOrientation,
+      marginMm: printMarginMm,
+      mode: printMode,
+      cellMm: printCellMm,
+    })
+    : null;
 
   const stats = chart ? {
     symbols: chart.flat().filter(c => c).length,
@@ -1199,7 +2015,7 @@ export default function App() {
               style={btnSidebar}
               onClick={() => {
                 if (user) signOutUser();
-                else signInWithGitHub();
+                else toggleMenuPanel("auth");
                 if (isMobile) setSidebarOpen(false);
               }}
             >
@@ -1209,6 +2025,18 @@ export default function App() {
           )}
           <button style={{ ...btnSidebar, borderColor: "#d55", color: "#a11" }} onClick={() => { deleteCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
             <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="delete" /></span><span>Weggooien</span>
+          </button>
+        </div>
+      </div>
+
+      <div style={sidebarSection}>
+        <div style={sidebarTitle}>Instellingen</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <button style={btnSidebar} onClick={() => toggleMenuPanel("palette")}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="palette" /></span><span>Garenpalet</span>
+          </button>
+          <button style={btnSidebar} onClick={() => toggleMenuPanel("translations")}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="translate" /></span><span>Vertaaltabel</span>
           </button>
         </div>
       </div>
@@ -1229,30 +2057,127 @@ export default function App() {
   );
 
   const exportText = () => {
+    const t = patternText;
     const hdr = [
-      `HAAKPATROON — Overlay Mozaiek`,
-      `Afmetingen: ${gridW} steken breed x ${gridH} rijen hoog`,
-      `Telrichting: ${projConfig.direction === "RtoL" ? "Rechts naar Links (←)" : "Links naar Rechts (→)"}`,
+      `${t.headerTitle}`,
+      `${templateText(t.dimensionsTemplate, { w: gridW, h: gridH })}`,
+      `${t.directionLabel}: ${projConfig.direction === "RtoL" ? t.directionRtoL : t.directionLtoR}`,
       ``,
-      `Kleuren:`,
-      `  ${colA.name} (kleur A): oneven rijen`,
-      `  ${colB.name} (kleur B): even rijen`,
+      `${t.colorsTitle}`,
+      `  ${templateText(t.colorAInfoTemplate, { name: colA.name })}`,
+      `  ${templateText(t.colorBInfoTemplate, { name: colB.name })}`,
       ``,
-      `Steken:`,
-      `  v = vaste in de achterste lus`,
-      `  stk = stokje in de voorste lus, 2 rijen lager`,
-      `  KS = kantsteek`,
+      `${t.stitchesTitle}`,
+      `  ${t.scInfo}`,
+      `  ${t.dcInfo}`,
+      `  ${t.edgeInfo}`,
       ``,
-      `Start: maak met ${colA.name} een lossenketting van ${gridW + 3} lossen,`,
-      `start in de 2e losse vanaf de haaknaald met in elke losse een v [${gridW + 2}]. Hecht af.`,
+      `${templateText(t.startLine1Template, { name: colA.name, chainCount: gridW + 3 })}`,
+      `${templateText(t.startLine2Template, { stitchCount: gridW + 2 })}`,
       ``,
-      `GESCHREVEN TEKST:`,
+      `${t.writtenTitle}:`,
       ``,
     ].join("\n");
     const txt = hdr + patternRows.join("\n");
     const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "haakpatroon.txt"; a.click();
+    a.href = URL.createObjectURL(blob); a.download = `${t.fileName}.txt`; a.click();
+  };
+
+  const printChart = () => {
+    if (!chart || !printLayout) {
+      alert("Er is geen chart om te printen.");
+      return;
+    }
+    const rowCount = chart.length;
+
+    const pages = [];
+    for (let py = 0; py < printLayout.pagesY; py++) {
+      for (let px = 0; px < printLayout.pagesX; px++) {
+        pages.push(buildPrintPageImage({
+          chart,
+          colA,
+          colB,
+          config: projConfig,
+          layout: printLayout,
+          pageX: px,
+          pageY: py,
+        }));
+      }
+    }
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Popup geblokkeerd. Sta popups toe om print preview te openen.");
+      return;
+    }
+
+    const sizeText = `${printPaper} ${printOrientation === "portrait" ? "staand" : "liggend"}`;
+    const pageCssSize = `${printPaper} ${printOrientation === "portrait" ? "portrait" : "landscape"}`;
+    const doc = win.document;
+    doc.open();
+    doc.write(`<!doctype html><html><head><meta charset="utf-8" /><title>Print chart - ${chartTitle || "YarnZoo"}</title></head><body><div id="print-root"></div></body></html>`);
+    doc.close();
+
+    const style = doc.createElement("style");
+    style.textContent = `
+      @page { size: ${pageCssSize}; margin: ${Math.max(3, Number(printMarginMm) || 0)}mm; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 12px; font-family: Arial, sans-serif; background: #f6f6f6; color: #222; }
+      .toolbar { position: sticky; top: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; z-index: 1; }
+      .meta { font-size: 12px; color: #555; }
+      .print-btn { border: 1px solid #222; border-radius: 6px; background: #fff; padding: 8px 12px; cursor: pointer; font-weight: 700; }
+      .page { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 0 auto 12px; display: inline-block; page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
+      .label { font-size: 11px; margin-bottom: 6px; color: #666; }
+      img { display: block; max-width: 100%; height: auto; }
+      @media print {
+        body { background: #fff; padding: 0; }
+        .toolbar { display: none; }
+        .page { border: none; border-radius: 0; padding: 0; margin: 0; display: block; }
+        .label { display: none; }
+      }
+    `;
+    doc.head.appendChild(style);
+
+    const root = doc.getElementById("print-root");
+    if (!root) return;
+
+    const toolbar = doc.createElement("div");
+    toolbar.className = "toolbar";
+
+    const meta = doc.createElement("div");
+    meta.className = "meta";
+    meta.innerHTML = `<strong>${chartTitle || "Naamloze chart"}</strong><br/>${sizeText} · ${pages.length} pagina${pages.length === 1 ? "" : "'s"} · cel ${printLayout.cellMm.toFixed(2)} mm`;
+
+    const printBtn = doc.createElement("button");
+    printBtn.className = "print-btn";
+    printBtn.textContent = "Print / Opslaan als PDF";
+    printBtn.onclick = () => win.print();
+
+    toolbar.appendChild(meta);
+    toolbar.appendChild(printBtn);
+    root.appendChild(toolbar);
+
+    for (let idx = 0; idx < pages.length; idx++) {
+      const p = pages[idx];
+      const section = doc.createElement("section");
+      section.className = "page";
+
+      const label = doc.createElement("div");
+      label.className = "label";
+      label.textContent = `Pagina ${idx + 1} · kolommen ${p.startCol + 1}-${p.endCol} · rijen ${rowCount - p.endRow + 1}-${rowCount - p.startRow}`;
+
+      const img = doc.createElement("img");
+      img.alt = `Chart pagina ${idx + 1}`;
+      img.src = p.dataUrl;
+
+      section.appendChild(label);
+      section.appendChild(img);
+      root.appendChild(section);
+    }
+
+    win.focus();
   };
 
   return (
@@ -1323,6 +2248,76 @@ export default function App() {
           </div>
         )}
 
+        {openMenu === "auth" && hasSupabaseConfig && !user && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange }}>Account</div>
+              <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+            </div>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+              <button
+                onClick={() => setAuthMode("signin")}
+                style={{
+                  ...btnSm,
+                  borderColor: authMode === "signin" ? B.orange : B.border,
+                  color: authMode === "signin" ? B.orange : B.dark,
+                  background: authMode === "signin" ? B.cream : B.white,
+                }}
+              >
+                Inloggen
+              </button>
+              <button
+                onClick={() => setAuthMode("signup")}
+                style={{
+                  ...btnSm,
+                  borderColor: authMode === "signup" ? B.orange : B.border,
+                  color: authMode === "signup" ? B.orange : B.dark,
+                  background: authMode === "signup" ? B.cream : B.white,
+                }}
+              >
+                Registreren
+              </button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <label style={{ fontSize: "12px", color: "#666" }}>
+                E-mailadres
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={e => setAuthEmail(e.target.value)}
+                  placeholder="naam@voorbeeld.nl"
+                  style={{ ...inp, width: "100%", textAlign: "left", marginTop: "4px" }}
+                />
+              </label>
+              <label style={{ fontSize: "12px", color: "#666" }}>
+                Wachtwoord
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={e => setAuthPassword(e.target.value)}
+                  placeholder="Minimaal 6 tekens"
+                  style={{ ...inp, width: "100%", textAlign: "left", marginTop: "4px" }}
+                />
+              </label>
+              <button
+                onClick={authMode === "signin" ? signInWithEmailPassword : signUpWithEmailPassword}
+                disabled={authBusy}
+                style={{
+                  ...btnPri,
+                  width: "fit-content",
+                  opacity: authBusy ? 0.6 : 1,
+                  cursor: authBusy ? "not-allowed" : "pointer",
+                }}
+              >
+                {authBusy ? "Even geduld..." : authMode === "signin" ? "Inloggen met e-mail" : "Account aanmaken"}
+              </button>
+              <div style={{ fontSize: "11px", color: "#666" }}>
+                Na inloggen worden je charts en vertalingen direct aan cloudfuncties gekoppeld.
+              </div>
+            </div>
+          </div>
+        )}
+
         {openMenu === "folders" && (
           <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
             <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange, marginBottom: "8px" }}>Mappen beheren</div>
@@ -1345,6 +2340,131 @@ export default function App() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {openMenu === "palette" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange }}>Garenpalet</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button style={btnSm} onClick={resetCustomPalette}>Reset custom kleuren</button>
+                <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+              </div>
+            </div>
+            <div style={{ marginBottom: "10px", fontSize: "12px", color: "#666" }}>
+              Basiskleuren zijn vergrendeld. Alleen aangepaste kleuren kunnen hernoemd of verwijderd worden.
+            </div>
+            <div style={{ overflow: "auto", border: `1px solid ${B.border}`, borderRadius: "6px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <thead>
+                  <tr style={{ background: B.cream, color: B.dark }}>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "44px" }}>Kleur</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "160px" }}>Naam</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "95px" }}>Hex</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "88px" }}>Type</th>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "160px" }}>Acties</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yarnPalette.map((entry, idx) => (
+                    <tr key={`${entry.name}-${entry.hex}-${idx}`}>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}` }}>
+                        <span style={{ display: "inline-block", width: "18px", height: "18px", borderRadius: "4px", border: "1px solid #bbb", background: entry.hex }} />
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}`, color: B.dark, fontWeight: 700 }}>{entry.name}</td>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}`, color: "#555", fontFamily: F.mono }}>{entry.hex}</td>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}`, color: entry.locked ? B.orange : "#666" }}>
+                        {entry.locked ? "Basis" : "Custom"}
+                      </td>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}` }}>
+                        {entry.locked ? (
+                          <span style={{ fontSize: "11px", color: "#999" }}>Vergrendeld</span>
+                        ) : (
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                            <button style={btnSm} onClick={() => renamePaletteEntry(idx)}>Hernoemen</button>
+                            <button style={{ ...btnSm, borderColor: "#d55", color: "#a11" }} onClick={() => removePaletteEntry(idx)}>Verwijderen</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {openMenu === "translations" && (
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange }}>Vertaaltabel geschreven patroon</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={lbl}>Actieve taal:</span>
+                <select value={patternLanguage} onChange={e => setPatternLanguage(e.target.value)} style={{ ...inp, width: "132px", textAlign: "left" }}>
+                  {languageEntries.map(([key, v]) => (
+                    <option key={key} value={key}>{v.label}</option>
+                  ))}
+                </select>
+                <button style={{ ...btnSm, borderColor: translationsLocked ? B.orange : "#d55", color: translationsLocked ? B.orange : "#a11" }} onClick={toggleTranslationsLock}>
+                  {translationsLocked ? "Ontgrendelen" : "Vergrendelen"}
+                </button>
+                <button style={btnSm} onClick={resetTranslationsToDefault}>Reset standaard</button>
+                <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
+              </div>
+            </div>
+            <div style={{ marginBottom: "10px", fontSize: "12px", color: "#666" }}>
+              Opslag: <strong>{translationCloudLabel}</strong>
+              {translationCloudStatus === "setup_needed" && " (voer de SQL-update uit voor globale vertaaltabellen)"}
+            </div>
+            {!translationsLocked && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "10px", padding: "8px", background: B.cream, border: `1px solid ${B.border}`, borderRadius: "6px" }}>
+                <span style={{ ...lbl, color: B.orange }}>Bewerkmodus actief</span>
+                <span style={{ fontSize: "12px", color: "#666" }}>Tabel is van het slot. Pas aan en vergrendel weer.</span>
+                <input value={newLanguageCode} onChange={e => setNewLanguageCode(e.target.value)} placeholder="Taalcode (bv. fr)" style={{ ...inp, width: "130px", textAlign: "left" }} />
+                <input value={newLanguageLabel} onChange={e => setNewLanguageLabel(e.target.value)} placeholder="Taalnaam" style={{ ...inp, width: "140px", textAlign: "left" }} />
+                <button style={btnSm} onClick={addTranslationLanguage}>Taal toevoegen</button>
+              </div>
+            )}
+            <div style={{ overflow: "auto", border: `1px solid ${B.border}`, borderRadius: "6px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <thead>
+                  <tr style={{ background: B.cream, color: B.dark }}>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "140px" }}>Term</th>
+                    {languageEntries.map(([lang, v]) => (
+                      <th key={lang} style={{ textAlign: "left", padding: "8px", borderBottom: `1px solid ${B.border}`, minWidth: "210px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                          <span>{v.label} ({lang})</span>
+                          {!translationsLocked && lang !== "nl" && (
+                            <button style={{ ...btnSm, padding: "2px 8px", fontSize: "11px", borderColor: "#d55", color: "#a11" }} onClick={() => removeTranslationLanguage(lang)}>x</button>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {TRANSLATION_FIELDS.map((field) => (
+                    <tr key={field.key}>
+                      <td style={{ padding: "8px", borderBottom: `1px solid ${B.border}`, color: B.dark, fontWeight: 700 }}>{field.term}</td>
+                      {languageEntries.map(([lang, val]) => (
+                        <td key={`${field.key}-${lang}`} style={{ padding: "8px", borderBottom: `1px solid ${B.border}`, color: "#555" }}>
+                          {translationsLocked ? (
+                            val[field.key]
+                          ) : (
+                            <input
+                              value={val[field.key] || ""}
+                              onChange={e => updateTranslationValue(lang, field.key, e.target.value)}
+                              style={{ ...inp, width: "100%", textAlign: "left", fontSize: "11px" }}
+                            />
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1527,10 +2647,27 @@ export default function App() {
               </Panel>
 
               <Panel title="Kleuren">
-                <div style={{ display: "flex", gap: "12px", alignItems: "flex-end" }}>
-                  <ColorPick label="Kleur A (oneven rijen)" color={colA} set={setColA} />
-                  <ColorPick label="Kleur B (even rijen)" color={colB} set={setColB} />
+                <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                  <ColorPick
+                    label="Kleur A (oneven rijen)"
+                    color={colA}
+                    set={setColA}
+                    palette={yarnPalette}
+                    onPickFromPalette={(entry) => applyPaletteColor(entry, setColA, DEFAULT_COLOR_A)}
+                    onSaveToPalette={() => saveColorToPalette(colA)}
+                  />
+                  <ColorPick
+                    label="Kleur B (even rijen)"
+                    color={colB}
+                    set={setColB}
+                    palette={yarnPalette}
+                    onPickFromPalette={(entry) => applyPaletteColor(entry, setColB, DEFAULT_COLOR_B)}
+                    onSaveToPalette={() => saveColorToPalette(colB)}
+                  />
                   <button onClick={() => { const tmp = colA; setColA(colB); setColB(tmp); }} style={{ ...btnSm, marginBottom: "2px" }}>⇄</button>
+                </div>
+                <div style={{ marginTop: "6px", fontSize: "11px", color: "#777" }}>
+                  Basispalet staat vast. Nieuwe kleuren voeg je toe met <strong>In palet</strong>. Beheer via Instellingen → Garenpalet.
                 </div>
               </Panel>
             </div>
@@ -1633,10 +2770,50 @@ export default function App() {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
               <h2 style={{ fontSize: "28px", color: B.orange, margin: 0, fontFamily: F.heading, fontWeight: 700 }}>Geschreven haakpatroon</h2>
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                 <button onClick={() => setStep("edit")} style={btnSec}>← Editor</button>
+                <button onClick={printChart} style={btnSec}>Print / PDF</button>
                 <button onClick={exportText} style={btnPri}>Download .txt</button>
               </div>
+            </div>
+
+            <div style={{ marginBottom: "14px" }}>
+              <Panel title="Print instellingen">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+                  <span style={lbl}>Papier:</span>
+                  <select value={printPaper} onChange={e => setPrintPaper(e.target.value)} style={{ ...inp, width: "90px" }}>
+                    <option value="A4">A4</option>
+                    <option value="A3">A3</option>
+                    <option value="Letter">Letter</option>
+                  </select>
+                  <span style={lbl}>Oriëntatie:</span>
+                  <select value={printOrientation} onChange={e => setPrintOrientation(e.target.value)} style={{ ...inp, width: "105px" }}>
+                    <option value="portrait">Staand</option>
+                    <option value="landscape">Liggend</option>
+                  </select>
+                  <span style={lbl}>Marge (mm):</span>
+                  <input type="number" min={3} max={30} step="1" value={printMarginMm} onChange={e => setPrintMarginMm(parseFloat(e.target.value) || 3)} style={{ ...inp, width: "76px" }} />
+                  <span style={lbl}>Grootte:</span>
+                  <select value={printMode} onChange={e => setPrintMode(e.target.value)} style={{ ...inp, width: "170px" }}>
+                    <option value="single">Passend op 1 pagina</option>
+                    <option value="multi">Verspreid over pagina's</option>
+                  </select>
+                  {printMode === "multi" && (
+                    <>
+                      <span style={lbl}>Cel (mm):</span>
+                      <input type="number" min={1.2} max={8} step="0.1" value={printCellMm} onChange={e => setPrintCellMm(parseFloat(e.target.value) || 1.2)} style={{ ...inp, width: "76px" }} />
+                    </>
+                  )}
+                  <button onClick={printChart} style={btnSm}>Open print preview</button>
+                </div>
+                {printLayout && (
+                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#666" }}>
+                    Uitkomst: {printLayout.pagesX} × {printLayout.pagesY} pagina's = <strong>{printLayout.totalPages}</strong> totaal ·
+                    raster per pagina: {printLayout.colsPerPage} kolommen × {printLayout.rowsPerPage} rijen ·
+                    celgrootte: {printLayout.cellMm.toFixed(2)} mm
+                  </div>
+                )}
+              </Panel>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "300px 1fr", gap: "20px" }}>
@@ -1657,12 +2834,12 @@ export default function App() {
                 fontFamily: F.mono, fontSize: "11px", lineHeight: "1.5",
               }}>
                 <div style={{ fontWeight: 700, fontSize: "24px", color: B.orange, marginBottom: "4px", letterSpacing: "0.02em", fontFamily: F.heading }}>
-                  GESCHREVEN TEKST
+                  {patternText.writtenTitle}
                 </div>
                 <div style={{ fontFamily: F.body, fontSize: "11px", color: "#666", lineHeight: 1.6, marginBottom: "12px", paddingBottom: "12px", borderBottom: `1px solid ${B.beige}` }}>
-                  <strong>Kleuren:</strong> {colA.name} (A, oneven rijen) · {colB.name} (B, even rijen)<br />
-                  <strong>Richting:</strong> {projConfig.direction === "RtoL" ? "Begin Rechts (←)" : "Begin Links (→)"}<br /><br />
-                  Start met {colA.name}, lossenketting van {chart[0].length + 3} lossen, start in de 2e losse met in elke losse een v [{chart[0].length + 2}]. Hecht af.
+                  <strong>{patternText.colorsLabelInline}:</strong> {templateText(patternText.colorAInfoTemplate, { name: colA.name })} · {templateText(patternText.colorBInfoTemplate, { name: colB.name })}<br />
+                  <strong>{patternText.directionLabelInline}:</strong> {projConfig.direction === "RtoL" ? patternText.directionRtoL : patternText.directionLtoR}<br /><br />
+                  <strong>{patternText.startLabelInline}:</strong> {templateText(patternText.startInlineTemplate, { name: colA.name, chainCount: chart[0].length + 3, stitchCount: chart[0].length + 2 })}
                 </div>
                 {patternRows.map((r, i) => {
                   const rowNum = i + 1;
@@ -1759,6 +2936,26 @@ function MenuIcon({ name }) {
       </svg>
     );
   }
+  if (name === "palette") {
+    return (
+      <svg {...base}>
+        <rect x="4" y="5" width="6" height="6" rx="1.2" />
+        <rect x="14" y="5" width="6" height="6" rx="1.2" />
+        <rect x="4" y="13" width="6" height="6" rx="1.2" />
+        <path d="M14 16h6" />
+      </svg>
+    );
+  }
+  if (name === "translate") {
+    return (
+      <svg {...base}>
+        <path d="M4 6h8M8 4v2M8 6c0 4-2 7-5 9" />
+        <path d="M3 15l3 3m0 0l3-3m-3 3v3" />
+        <path d="M14 7h7M17.5 7v11" />
+        <path d="M14 18h7" />
+      </svg>
+    );
+  }
   if (name === "library") {
     return (
       <svg {...base}>
@@ -1815,15 +3012,53 @@ function Panel({ title, children }) {
   );
 }
 
-function ColorPick({ label, color, set }) {
+function ColorPick({ label, color, set, palette = [], onPickFromPalette, onSaveToPalette }) {
+  const selectedPaletteIndex = palette.findIndex(
+    entry => entry.name.trim().toLowerCase() === String(color.name || "").trim().toLowerCase()
+      && entry.hex.toUpperCase() === String(color.hex || "").toUpperCase(),
+  );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: "160px" }}>
       <span style={{ fontSize: "9px", color: "#888" }}>{label}</span>
       <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-        <input type="color" value={color.hex} onChange={e => set({ ...color, hex: e.target.value })}
+        <input type="color" value={normalizeHexColor(color.hex) || "#000000"} onChange={e => set({ ...color, hex: e.target.value })}
           style={{ width: "26px", height: "26px", border: "none", borderRadius: "6px", cursor: "pointer", padding: 0 }} />
         <input type="text" value={color.name} onChange={e => set({ ...color, name: e.target.value })}
-          style={{ ...inp, width: "80px", fontSize: "11px" }} placeholder="Naam" />
+          style={{ ...inp, width: "90px", fontSize: "11px", textAlign: "left" }} placeholder="Naam" />
+      </div>
+      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+        <input
+          type="text"
+          value={color.hex}
+          onChange={e => set({ ...color, hex: e.target.value })}
+          style={{ ...inp, width: "90px", fontSize: "11px", textAlign: "left" }}
+          placeholder="#RRGGBB"
+        />
+        <button style={{ ...btnSm, padding: "5px 8px", fontSize: "11px" }} onClick={onSaveToPalette}>
+          In palet
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+        <select
+          value={selectedPaletteIndex >= 0 ? String(selectedPaletteIndex) : ""}
+          onChange={(e) => {
+            if (e.target.value === "") return;
+            const idx = Number(e.target.value);
+            if (Number.isNaN(idx)) return;
+            const picked = palette[idx];
+            if (!picked) return;
+            onPickFromPalette?.(picked);
+          }}
+          style={{ ...inp, width: "140px", textAlign: "left" }}
+        >
+          <option value="">Kies uit palet</option>
+          {palette.map((entry, idx) => (
+            <option key={`${entry.name}-${entry.hex}-${idx}`} value={idx}>
+              {entry.name} ({entry.hex}){entry.locked ? " [basis]" : ""}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

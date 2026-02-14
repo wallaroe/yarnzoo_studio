@@ -6,11 +6,40 @@ import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
 // ============================================================
 
 const B = {
-  orange: "#F5921B", orangeLight: "#F7A63E",
-  darkGreen: "#2D5A27", lightGreen: "#4A8C3F",
-  cream: "#FAF7F2", beige: "#EDE8DF",
-  brown: "#5C4033", dark: "#2A2A2A", white: "#FFFFFF",
+  orange: "#E74016",
+  orangeLight: "#F26A48",
+  orangeHover: "#C63713",
+  orangeAlt: "#EF7D00",
+  darkGreen: "#444249",
+  lightGreen: "#D75A3C",
+  cream: "#FFEDEC",
+  beige: "#E6E6E6",
+  border: "#EBEBED",
+  announcementBg: "#FFF1DB",
+  announcementText: "#2C2D2E",
+  brown: "#444249",
+  dark: "#444249",
+  white: "#FFFFFF",
 };
+
+const F = {
+  heading: "'SketchSolid', 'CamptonMedium', 'Campton Medium', sans-serif",
+  body: "'CamptonMedium', 'Campton Medium', sans-serif",
+  mono: "'CamptonMedium', 'Campton Medium', sans-serif",
+};
+
+const BRAND_FONT_FACE_CSS = `
+@font-face {
+  font-family: SketchSolid;
+  src: url("https://cdn.shopify.com/s/files/1/0773/7216/2371/files/KGSecondChancesSolid.woff?v=1693171374") format("woff");
+  font-display: swap;
+}
+@font-face {
+  font-family: CamptonMedium;
+  src: url("https://cdn.shopify.com/s/files/1/0773/7216/2371/files/campton-medium.woff?v=1693171374") format("woff");
+  font-display: swap;
+}
+`;
 
 const STORAGE_KEY = "yarnzoo_mosaic_workspace_v1";
 const DEFAULT_FOLDER_ID = "folder-default";
@@ -64,20 +93,34 @@ const createEmptyChart = (w, h) =>
 // Get row color: row 0 (bottom) = A, row 1 = B...
 const getRowColor = (rowIdx) => (rowIdx % 2 === 0 ? 0 : 1); // 0=A, 1=B
 
-// Validate no-stacking rule
+// Validate no-stacking rule — multiple passes to handle cascades
 function validateNoStacking(chart) {
   const h = chart.length, w = chart[0].length;
   const fixed = chart.map(r => [...r]);
-  let fixes = 0;
-  for (let y = 0; y < h - 1; y++) {
-    for (let x = 0; x < w; x++) {
-      if (fixed[y][x] && fixed[y + 1][x]) {
-        fixed[y + 1][x] = false;
-        fixes++;
+  let totalFixes = 0;
+
+  // Bottom row (row 1) is always "v".
+  for (let x = 0; x < w; x++) {
+    if (fixed[h - 1][x]) {
+      fixed[h - 1][x] = false;
+      totalFixes++;
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let y = h - 1; y > 0; y--) {
+      for (let x = 0; x < w; x++) {
+        if (fixed[y][x] && fixed[y - 1][x]) {
+          fixed[y - 1][x] = false;
+          totalFixes++;
+          changed = true;
+        }
       }
     }
   }
-  return { chart: fixed, fixes };
+  return { chart: fixed, fixes: totalFixes };
 }
 
 // ============================================================
@@ -91,8 +134,8 @@ function imageToChart(img, targetW, targetH, threshold) {
   ctx.drawImage(img, 0, 0, targetW, targetH);
   const data = ctx.getImageData(0, 0, targetW, targetH).data;
 
-  // First pass: determine which pixels are "dark"
-  const raw = [];
+  // 1) Build dark/light mask from source image.
+  const darkMask = [];
   for (let y = 0; y < targetH; y++) {
     const row = [];
     for (let x = 0; x < targetW; x++) {
@@ -100,10 +143,77 @@ function imageToChart(img, targetW, targetH, threshold) {
       const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
       row.push(gray < threshold);
     }
-    raw.push(row);
+    darkMask.push(row);
   }
-  const chart = raw.map(row => row.map(dark => dark));
-  return validateNoStacking(chart);
+
+  // 2) Solve overlay symbols from desired final color map.
+  // Mapping tries both interpretations:
+  // - dark pixel => color A
+  // - dark pixel => color B
+  // and picks the best fit under overlay constraints.
+  const baseRowColor = Array.from({ length: targetH }, (_, y) => getRowColor(targetH - y - 1)); // top->bottom
+
+  const solveWithDarkColor = (darkColorIdx) => {
+    const chart = Array.from({ length: targetH }, () => Array.from({ length: targetW }, () => false));
+    let totalMismatches = 0;
+
+    for (let x = 0; x < targetW; x++) {
+      const desired = [];
+      for (let y = 0; y < targetH; y++) {
+        desired.push(darkMask[y][x] ? darkColorIdx : 1 - darkColorIdx);
+      }
+
+      // Symbol on row y overlays row y+1 (the cell below).
+      // So for final row y>0, opposite color is controlled by symbol[y-1].
+      const needOpposite = desired.map((d, y) => d !== baseRowColor[y]);
+      const symbolCount = targetH - 1; // symbol rows 0..h-2, bottom row forbidden
+
+      // DP over symbol[] with "no adjacent true" constraint.
+      const INF = 1e9;
+      const dp = Array.from({ length: symbolCount + 1 }, () => [INF, INF]);
+      const prevPick = Array.from({ length: symbolCount + 1 }, () => [null, null]);
+      dp[0][0] = 0;
+
+      for (let y = 0; y < symbolCount; y++) {
+        const targetSymbol = needOpposite[y + 1] ? 1 : 0;
+        for (let prev = 0; prev <= 1; prev++) {
+          if (dp[y][prev] >= INF) continue;
+          for (let cur = 0; cur <= 1; cur++) {
+            if (y > 0 && prev === 1 && cur === 1) continue;
+
+            const mismatch = cur === targetSymbol ? 0 : 1;
+            const score = dp[y][prev] + mismatch;
+            if (score < dp[y + 1][cur]) {
+              dp[y + 1][cur] = score;
+              prevPick[y + 1][cur] = prev;
+            }
+          }
+        }
+      }
+
+      let endState = dp[symbolCount][0] <= dp[symbolCount][1] ? 0 : 1;
+      const rowZeroMismatch = needOpposite[0] ? 1 : 0;
+      totalMismatches += Math.min(dp[symbolCount][0], dp[symbolCount][1]) + rowZeroMismatch;
+
+      const symbols = Array.from({ length: symbolCount }, () => false);
+      for (let y = symbolCount; y > 0; y--) {
+        symbols[y - 1] = endState === 1;
+        endState = prevPick[y][endState] ?? 0;
+      }
+
+      for (let y = 0; y < symbolCount; y++) {
+        chart[y][x] = symbols[y];
+      }
+      chart[targetH - 1][x] = false; // bottom row (row 1) always vaste
+    }
+
+    return { chart, mismatches: totalMismatches };
+  };
+
+  const asDarkA = solveWithDarkColor(0);
+  const asDarkB = solveWithDarkColor(1);
+  const best = asDarkA.mismatches <= asDarkB.mismatches ? asDarkA : asDarkB;
+  return validateNoStacking(best.chart);
 }
 
 // ============================================================
@@ -159,7 +269,7 @@ function generateWrittenPattern(chart, colA, colB, direction = "RtoL") {
 // ============================================================
 // Chart Canvas — shows colored grid with symbols
 // ============================================================
-function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config = { direction: "RtoL", showEdges: true } }) {
+function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config = { direction: "RtoL", showEdges: true }, onRuleMessage }) {
   const ref = useRef(null);
   const drawing = useRef(false);
   const lastCell = useRef(null);
@@ -198,32 +308,77 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
     ctx.scale(dpr, dpr);
     ctx.translate(marginLeft, marginTop);
 
+    // Helper: draw a single cell
+    function drawCell(vx, vy, size, color, content, symbolColor) {
+      ctx.fillStyle = color;
+      ctx.fillRect(vx * size, vy * size, size, size);
+      if (!content) return;
+
+      ctx.strokeStyle = symbolColor;
+      ctx.lineWidth = Math.max(1, size * 0.14);
+      const cx = vx * size + size / 2;
+      const cy = vy * size + size / 2;
+
+      if (content === "DC") {
+        ctx.fillStyle = symbolColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `${Math.max(4, size * 0.62)}px monospace`;
+        ctx.fillText("F", cx, cy + size * 0.02);
+      } else if (content === "KS") {
+        ctx.fillStyle = symbolColor;
+        ctx.beginPath(); ctx.arc(cx, cy, size * 0.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
     const colAHex = colA.hex;
     const colBHex = colB.hex;
 
     // --- Draw Grid & Stitches ---
+    // 1) Base: every cell is a "v" in the row color (light tint)
     for (let y = 0; y < h; y++) {
       const rowNum = h - y;
       const colorIdx = getRowColor(rowNum - 1);
       const rowColor = colorIdx === 0 ? colAHex : colBHex;
-      const rowColorLight = colorIdx === 0 ? colAHex + "40" : colBHex + "40";
-      const symbolColor = "#fff";
 
-      // 1. Draw Edges
       if (config.showEdges) {
-        // Left Column (End KS if RtoL)
-        drawCell(ctx, 0, y, cellSize, rowColor, "KS", symbolColor);
-        // Right Column (Start KS if RtoL)
-        drawCell(ctx, totalW - 1, y, cellSize, rowColor, "KS", symbolColor);
+        drawCell(0, y, cellSize, rowColor, "KS", "#fff");
+        drawCell(totalW - 1, y, cellSize, rowColor, "KS", "#fff");
       }
 
-      // 2. Draw Pattern
       for (let x = 0; x < w; x++) {
         const visualX = xOffset + x;
-        const hasSymbol = chart[y][x];
-        const bg = hasSymbol ? rowColor : rowColorLight;
+        drawCell(visualX, y, cellSize, rowColor, null, "#262626");
+      }
+    }
 
-        drawCell(ctx, visualX, y, cellSize, bg, hasSymbol ? "DC" : null, symbolColor);
+    // 2) Overlay: a symbol indicates a mosaic dc that is visually two cells high.
+    for (let y = 0; y < h; y++) {
+      const rowNum = h - y;
+      const colorIdx = getRowColor(rowNum - 1);
+      const rowColor = colorIdx === 0 ? colAHex : colBHex;
+      for (let x = 0; x < w; x++) {
+        if (!chart[y][x]) continue;
+        const visualX = xOffset + x;
+        // current cell
+        ctx.fillStyle = rowColor;
+        ctx.fillRect(visualX * cellSize, y * cellSize, cellSize, cellSize);
+        // covered cell below
+        if (y < h - 1) {
+          ctx.fillRect(visualX * cellSize, (y + 1) * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    // 3) Symbol mark
+    for (let y = 0; y < h; y++) {
+      const rowNum = h - y;
+      const colorIdx = getRowColor(rowNum - 1);
+      const rowColor = colorIdx === 0 ? colAHex : colBHex;
+      for (let x = 0; x < w; x++) {
+        if (!chart[y][x]) continue;
+        const visualX = xOffset + x;
+        drawCell(visualX, y, cellSize, rowColor, "DC", "#1f1f1f");
       }
     }
 
@@ -338,34 +493,6 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
   useEffect(() => { draw(); }, [draw]);
 
-  // Helper
-  const drawCell = (ctx, vx, vy, size, color, content, symbolColor) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(vx * size, vy * size, size, size);
-    if (!content || size < 6) return;
-
-    ctx.strokeStyle = symbolColor;
-    ctx.lineWidth = Math.max(1, size * 0.12);
-    const cx = vx * size + size / 2;
-    const cy = vy * size + size / 2;
-    const p = size * 0.25;
-    const l = vx * size + p;
-    const r = (vx + 1) * size - p;
-    const t = vy * size + p;
-    const b = (vy + 1) * size - p;
-
-    if (content === "DC") {
-      ctx.beginPath();
-      ctx.moveTo(l, t); ctx.lineTo(r, b);
-      ctx.moveTo(r, t); ctx.lineTo(l, b);
-      ctx.stroke();
-    } else if (content === "KS") {
-      ctx.fillStyle = symbolColor;
-      // Draw a distinct dot for edge
-      ctx.beginPath(); ctx.arc(cx, cy, size * 0.2, 0, Math.PI * 2); ctx.fill();
-    }
-  };
-
   const getCell = (e) => {
     if (mode === "view") return null;
     const c = ref.current;
@@ -386,18 +513,23 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
   const paint = (x, y) => {
     const g = chart.map(r => [...r]);
-    if (tool === "symbol") {
-      g[y][x] = true;
-    } else if (tool === "erase") {
-      g[y][x] = false;
-    } else {
-      g[y][x] = !g[y][x];
+    const nextValue = tool === "symbol" ? true : tool === "erase" ? false : !g[y][x];
+
+    if (nextValue && y === h - 1) {
+      onRuleMessage?.("Rij 1 is altijd vaste (geen stokje toegestaan).");
+      return;
     }
-    if (g[y][x]) {
-      if (y > 0 && g[y - 1][x]) g[y - 1][x] = false;
-      if (y < h - 1 && g[y + 1][x]) g[y + 1][x] = false;
+
+    g[y][x] = nextValue;
+    const { chart: fixed, fixes } = validateNoStacking(g);
+
+    if (nextValue && !fixed[y][x]) {
+      onRuleMessage?.("Hier kan geen stokje: in de aangrenzende rij moet dit een vaste blijven.");
+    } else if (nextValue && fixes > 0) {
+      onRuleMessage?.("Stokje-op-stokje gecorrigeerd volgens overlay-regel.");
     }
-    setChart(g);
+
+    setChart(fixed);
   };
 
   const onDown = (e) => {
@@ -416,7 +548,7 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
   return (
     <canvas ref={ref} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-      style={{ cursor: mode === "edit" ? "crosshair" : "default", borderRadius: "4px", display: "block" }} />
+      style={{ cursor: mode === "edit" ? "crosshair" : "default", borderRadius: "6px", display: "block" }} />
   );
 }
 
@@ -444,21 +576,22 @@ function VisualPreview({ chart, colA, colB }) {
       }
     }
 
-    // Overlay pass
-    for (let y = 0; y < h - 1; y++) {
+    // Overlay pass: a DC on row N covers the cell below (next row).
+    for (let y = 0; y < h; y++) {
       const rowNum = h - y;
       const colorIdx = getRowColor(rowNum - 1);
       const rowHex = colorIdx === 0 ? colA.hex : colB.hex;
       for (let x = 0; x < w; x++) {
         if (chart[y][x]) {
           ctx.fillStyle = rowHex;
-          ctx.fillRect(x * s, (y + 1) * s, s, s);
+          ctx.fillRect(x * s, y * s, s, s);
+          if (y < h - 1) ctx.fillRect(x * s, (y + 1) * s, s, s);
         }
       }
     }
   }, [chart, colA, colB]);
 
-  return <canvas ref={ref} style={{ width: "100%", imageRendering: "pixelated", borderRadius: "4px" }} />;
+  return <canvas ref={ref} style={{ width: "100%", imageRendering: "pixelated", borderRadius: "6px" }} />;
 }
 
 // ============================================================
@@ -499,6 +632,10 @@ export default function App() {
   const [remoteLoaded, setRemoteLoaded] = useState(!hasSupabaseConfig);
   const [isHydratingRemote, setIsHydratingRemote] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState(hasSupabaseConfig ? "guest" : "local");
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 1024 : false));
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [ruleNotice, setRuleNotice] = useState("");
+  const ruleNoticeTimer = useRef(null);
 
   // Project Settings
   const [projConfig, setProjConfig] = useState({
@@ -511,12 +648,63 @@ export default function App() {
   const findFolderName = (id) => folders.find(f => f.id === id)?.name || "Onbekend";
   const cloudStatusLabel = {
     local: "Lokaal",
-    guest: "Cloud gast",
-    syncing: "Cloud synchroniseert",
+    guest: "Niet ingelogd",
+    syncing: "Synchroniseert",
     cloud: "Cloud actief",
     cloud_error: "Cloud fout",
-    setup_needed: "Cloud setup nodig",
-  }[cloudSyncState] || "Lokaal";
+    setup_needed: "Setup nodig",
+  }[cloudSyncState] || "Onbekend";
+  const cloudStatusColor = {
+    local: "#9FA3A7",
+    guest: "#9FA3A7",
+    syncing: "#E97F32",
+    cloud: "#279A4B",
+    cloud_error: "#C63713",
+    setup_needed: "#C63713",
+  }[cloudSyncState] || "#9FA3A7";
+
+  const showRuleNotice = useCallback((message) => {
+    if (!message) return;
+    setRuleNotice(message);
+    if (ruleNoticeTimer.current) clearTimeout(ruleNoticeTimer.current);
+    ruleNoticeTimer.current = setTimeout(() => setRuleNotice(""), 2800);
+  }, []);
+
+  const applyValidatedChart = useCallback((nextChart, options = {}) => {
+    if (!Array.isArray(nextChart) || !nextChart.length) {
+      setChart(nextChart);
+      return 0;
+    }
+
+    const { chart: fixedChart, fixes } = validateNoStacking(nextChart);
+    setChart(fixedChart);
+
+    if (options.notify) {
+      if (fixes > 0) {
+        showRuleNotice(`${fixes} vakje(s) aangepast volgens overlay-regels.`);
+      } else if (options.successMessage) {
+        showRuleNotice(options.successMessage);
+      }
+    }
+
+    return fixes;
+  }, [showRuleNotice]);
+
+  useEffect(() => () => {
+    if (ruleNoticeTimer.current) clearTimeout(ruleNoticeTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onResize = () => setIsMobile(window.innerWidth < 1024);
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) {
@@ -707,7 +895,18 @@ export default function App() {
     setGridW(nextRecord.gridW || 140);
     setGridH(nextRecord.gridH || 140);
     setThreshold(nextRecord.threshold || 128);
-    setChart(Array.isArray(nextRecord.chart) ? nextRecord.chart.map(r => [...r]) : null);
+    if (Array.isArray(nextRecord.chart)) {
+      const loadedChart = nextRecord.chart.map(r => [...r]);
+      const { chart: fixedLoadedChart, fixes } = validateNoStacking(loadedChart);
+      setChart(fixedLoadedChart);
+      setFixCount(fixes);
+      if (fixes > 0) {
+        showRuleNotice(`${fixes} vakje(s) bij laden aangepast volgens overlay-regels.`);
+      }
+    } else {
+      setChart(null);
+      setFixCount(0);
+    }
     setCellSize(nextRecord.cellSize || 4);
     setColA(nextRecord.colA || { name: "Zandvoort", hex: "#E8DCC8" });
     setColB(nextRecord.colB || { name: "Arnhem", hex: "#C75050" });
@@ -859,7 +1058,6 @@ export default function App() {
       const rowNum = gridH - y;
       const colorIdx = getRowColor(rowNum - 1);
       const rowHex = colorIdx === 0 ? colA.hex : colB.hex;
-      const rowHexLight = colorIdx === 0 ? colA.hex + "50" : colB.hex + "50";
 
       if (projConfig.showEdges) {
         ctx.fillStyle = rowHex;
@@ -868,8 +1066,22 @@ export default function App() {
       }
 
       for (let x = 0; x < gridW; x++) {
-        ctx.fillStyle = preview[y][x] ? rowHex : rowHexLight;
+        ctx.fillStyle = rowHex;
         ctx.fillRect((xOffset + x) * s, y * s, s, s);
+      }
+    }
+
+    // Overlay in preview: symbol cells are shown as 2 cells high in the same row color.
+    for (let y = 0; y < gridH; y++) {
+      const rowNum = gridH - y;
+      const colorIdx = getRowColor(rowNum - 1);
+      const rowHex = colorIdx === 0 ? colA.hex : colB.hex;
+      for (let x = 0; x < gridW; x++) {
+        if (!preview[y][x]) continue;
+        const vx = xOffset + x;
+        ctx.fillStyle = rowHex;
+        ctx.fillRect(vx * s, y * s, s, s);
+        if (y < gridH - 1) ctx.fillRect(vx * s, (y + 1) * s, s, s);
       }
     }
   }, [step, imgEl, gridW, gridH, threshold, colA, colB, projConfig.showEdges]);
@@ -915,7 +1127,20 @@ export default function App() {
     if (!canGoToStep[nextStep]) return;
     setOpenMenu("");
     setStep(nextStep);
+    if (isMobile) setSidebarOpen(false);
   };
+
+  const toggleMenuPanel = (panel) => {
+    setOpenMenu(prev => (prev === panel ? "" : panel));
+    if (isMobile) setSidebarOpen(false);
+  };
+
+  const sidebarStepItems = [
+    { id: "upload", icon: "upload", label: "1. Upload", enabled: true },
+    { id: "adjust", icon: "adjust", label: "2. Conversie", enabled: !!imgEl },
+    { id: "edit", icon: "edit", label: "3. Bewerken", enabled: !!chart },
+    { id: "pattern", icon: "pattern", label: "4. Patroon", enabled: !!chart },
+  ];
 
   const filteredCharts = [...savedCharts]
     .filter(c => {
@@ -924,6 +1149,84 @@ export default function App() {
       return c.folderId === libraryFilter && !c.isDeleted;
     })
     .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+
+  const sidebarContent = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px", minHeight: isMobile ? "auto" : "calc(100vh - 128px)" }}>
+      <div style={sidebarSection}>
+        <div style={sidebarTitle}>Workflow</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {sidebarStepItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => goToStep(item.id)}
+              disabled={!item.enabled}
+              style={{
+                ...btnSidebar,
+                borderColor: step === item.id ? B.orange : B.border,
+                color: step === item.id ? B.orange : B.dark,
+                background: step === item.id ? B.cream : B.white,
+                opacity: item.enabled ? 1 : 0.45,
+                cursor: item.enabled ? "pointer" : "not-allowed",
+              }}
+            >
+              <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name={item.icon} /></span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={sidebarSection}>
+        <div style={sidebarTitle}>Bestand</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <button style={btnSidebar} onClick={() => { newChart(); if (isMobile) setSidebarOpen(false); }}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="new" /></span><span>Nieuw chart</span>
+          </button>
+          <button style={btnSidebar} onClick={() => { saveCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="save" /></span><span>Opslaan</span>
+          </button>
+          <button style={btnSidebar} onClick={() => toggleMenuPanel("settings")}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="settings" /></span><span>Chart instellingen</span>
+          </button>
+          <button style={btnSidebar} onClick={() => toggleMenuPanel("library")}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="library" /></span><span>Bibliotheek</span>
+          </button>
+          <button style={btnSidebar} onClick={() => toggleMenuPanel("folders")}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="folders" /></span><span>Mappen beheren</span>
+          </button>
+          {hasSupabaseConfig && (
+            <button
+              style={btnSidebar}
+              onClick={() => {
+                if (user) signOutUser();
+                else signInWithGitHub();
+                if (isMobile) setSidebarOpen(false);
+              }}
+            >
+              <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name={user ? "logout" : "login"} /></span>
+              <span>{user ? "Uitloggen" : "Inloggen"}</span>
+            </button>
+          )}
+          <button style={{ ...btnSidebar, borderColor: "#d55", color: "#a11" }} onClick={() => { deleteCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="delete" /></span><span>Weggooien</span>
+          </button>
+        </div>
+      </div>
+
+      {hasSupabaseConfig && (
+        <div style={sidebarCloudCard}>
+          <div style={sidebarCloudHeader}>
+            <span style={{ ...sidebarCloudDot, background: cloudStatusColor }} />
+            <span style={sidebarCloudTitle}>Cloud status</span>
+          </div>
+          <div style={sidebarCloudState}>{cloudStatusLabel}</div>
+          <div style={sidebarCloudText}>
+            {user ? `Ingelogd als ${user.email || "gebruiker"}` : "Log in om cloudopslag en synchronisatie te gebruiken."}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const exportText = () => {
     const hdr = [
@@ -953,51 +1256,60 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${B.cream} 0%, #EDEADF 100%)`, fontFamily: "'Segoe UI', sans-serif", color: B.dark }}>
-      <header style={{ background: B.darkGreen, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 20px rgba(0,0,0,0.15)" }}>
-        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div style={{ minHeight: "100vh", background: B.white, fontFamily: F.body, color: B.dark }}>
+      <style>{BRAND_FONT_FACE_CSS}</style>
+      <header style={{ background: B.white, position: "sticky", top: 0, zIndex: 100, borderBottom: `1px solid ${B.border}` }}>
+        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: B.orange, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>🐒</div>
+            <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: B.orange, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: B.white, fontWeight: 700 }}>YZ</div>
             <div>
-              <span style={{ color: B.orange, fontWeight: 800, fontSize: "18px" }}>YarnZoo</span>
-              <span style={{ color: B.lightGreen, fontSize: "9px", letterSpacing: "2px", textTransform: "uppercase", marginLeft: "8px" }}>Mosaic Studio v0.3</span>
+              <span style={{ color: B.orange, fontWeight: 700, fontSize: "22px", fontFamily: F.heading, lineHeight: 1 }}>YarnZoo</span>
+              <span style={{ color: "#7A7780", fontSize: "9px", letterSpacing: "1.4px", textTransform: "uppercase", marginLeft: "8px" }}>Mosaic Studio</span>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-            <button style={btnHead} onClick={() => setOpenMenu(openMenu === "file" ? "" : "file")}>Bestand</button>
-            {hasSupabaseConfig && (
-              <button style={btnHead} onClick={user ? signOutUser : signInWithGitHub}>
-                {user ? "Uitloggen" : "Login GitHub"}
-              </button>
-            )}
-            <span style={{ color: "#fff", fontSize: "11px", opacity: 0.9, maxWidth: "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ color: B.dark, fontSize: "11px", maxWidth: isMobile ? "130px" : "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: `1px solid ${B.border}`, borderRadius: "6px", padding: "5px 8px", background: "#FCFCFC" }}>
               {chartTitle}
             </span>
-            <span style={{ color: "#fff", fontSize: "10px", opacity: 0.75 }}>
-              {cloudStatusLabel}
-            </span>
-            <Steps current={step} onSelect={goToStep} canGoToStep={canGoToStep} />
+            {isMobile && (
+              <button style={btnHead} onClick={() => setSidebarOpen(true)}>Menu</button>
+            )}
           </div>
         </div>
-        <div style={{ height: "3px", background: `linear-gradient(90deg, ${B.lightGreen}, ${B.orange}, ${B.lightGreen})` }} />
       </header>
 
+      {isMobile && sidebarOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(0,0,0,0.35)" }}
+          onClick={() => setSidebarOpen(false)}
+        >
+          <aside
+            style={{ width: "290px", maxWidth: "88vw", height: "100%", background: B.white, borderRight: `1px solid ${B.border}`, padding: "16px" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ fontSize: "18px", color: B.orange, fontFamily: F.heading }}>Menu</div>
+              <button style={btnHead} onClick={() => setSidebarOpen(false)}>Sluiten</button>
+            </div>
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+
       <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
-        {openMenu === "file" && (
-          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            <button style={btnSm} onClick={newChart}>Nieuw chart</button>
-            <button style={btnSm} onClick={saveCurrentChart}>Opslaan</button>
-            <button style={btnSm} onClick={() => setOpenMenu("settings")}>Chart instellingen</button>
-            <button style={btnSm} onClick={() => setOpenMenu("library")}>Open bibliotheek</button>
-            <button style={btnSm} onClick={() => setOpenMenu("folders")}>Mappen beheren</button>
-            <button style={{ ...btnSm, borderColor: "#d55", color: "#a11" }} onClick={deleteCurrentChart}>Weggooien</button>
-            <button style={btnSm} onClick={() => setOpenMenu("")}>Sluiten</button>
-          </div>
-        )}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "280px minmax(0, 1fr)", gap: "16px", alignItems: "start" }}>
+          {!isMobile && (
+            <aside style={sidebarWrap}>
+              {sidebarContent}
+            </aside>
+          )}
+          <section style={{ minWidth: 0 }}>
 
         {openMenu === "settings" && (
-          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen, marginBottom: "8px" }}>Chart instellingen</div>
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange, marginBottom: "8px" }}>Chart instellingen</div>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
               <span style={lbl}>Titel:</span>
               <input value={chartTitle} onChange={e => setChartTitle(e.target.value)} style={{ ...inp, width: "180px", textAlign: "left" }} />
@@ -1012,8 +1324,8 @@ export default function App() {
         )}
 
         {openMenu === "folders" && (
-          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
-            <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen, marginBottom: "8px" }}>Mappen beheren</div>
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange, marginBottom: "8px" }}>Mappen beheren</div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
               <input value={folderDraftName} onChange={e => setFolderDraftName(e.target.value)} placeholder="Nieuwe mapnaam" style={{ ...inp, width: "170px", textAlign: "left" }} />
               <button style={btnSm} onClick={addFolder}>Map toevoegen</button>
@@ -1038,9 +1350,9 @@ export default function App() {
         )}
 
         {openMenu === "library" && (
-          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "10px", padding: "12px", marginBottom: "14px" }}>
+          <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 700, color: B.darkGreen }}>Bibliotheek</div>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: B.orange }}>Bibliotheek</div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={lbl}>Filter:</span>
                 <select value={libraryFilter} onChange={e => setLibraryFilter(e.target.value)} style={{ ...inp, width: "180px" }}>
@@ -1057,7 +1369,7 @@ export default function App() {
                 const restorable = withinRestoreWindow(saved);
                 const deletedLabel = saved.isDeleted ? (restorable ? "verwijderd (herstelbaar)" : "verwijderd (termijn verlopen)") : "actief";
                 return (
-                  <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "8px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                     <div style={{ fontSize: "12px", color: "#555" }}>
                       <strong style={{ color: B.dark }}>{saved.title || "Naamloze chart"}</strong><br />
                       {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
@@ -1074,7 +1386,7 @@ export default function App() {
 
         {step === "upload" && (
           <div style={{ textAlign: "center", paddingTop: "60px" }}>
-            <h1 style={{ fontSize: "28px", color: B.darkGreen, marginBottom: "8px", fontWeight: 800 }}>Upload je ontwerp</h1>
+            <h1 style={{ fontSize: "34px", color: B.orange, marginBottom: "8px", fontWeight: 700, fontFamily: F.heading }}>Upload je ontwerp</h1>
             <p style={{ color: "#888", fontSize: "14px", maxWidth: "520px", margin: "0 auto 32px", lineHeight: 1.6 }}>
               Upload een afbeelding van je dier of ontwerp. Het wordt automatisch omgezet naar een overlay mozaiek haakpatroon. Werkt het beste met tweekleurige afbeeldingen met hoog contrast.
             </p>
@@ -1086,8 +1398,8 @@ export default function App() {
               onMouseEnter={e => { e.currentTarget.style.borderColor = B.orange; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = `${B.orange}40`; }}
             >
-              <div style={{ fontSize: "48px" }}>🖼️</div>
-              <div style={{ fontSize: "16px", fontWeight: 600, color: B.darkGreen }}>Klik om een afbeelding te kiezen</div>
+              <div style={{ fontSize: "12px", letterSpacing: "1.2px", textTransform: "uppercase", color: B.orange, fontWeight: 700 }}>Afbeelding uploaden</div>
+              <div style={{ fontSize: "16px", fontWeight: 600, color: B.dark }}>Klik om een afbeelding te kiezen</div>
               <div style={{ fontSize: "12px", color: "#aaa" }}>JPG, PNG — bij voorkeur 2 kleuren / hoog contrast</div>
               <input type="file" accept="image/*" onChange={handleUpload} style={{ display: "none" }} />
             </label>
@@ -1096,18 +1408,18 @@ export default function App() {
 
         {step === "adjust" && (
           <div>
-            <h2 style={{ fontSize: "20px", color: B.darkGreen, marginBottom: "16px" }}>Pas de conversie aan</h2>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+            <h2 style={{ fontSize: "28px", color: B.orange, marginBottom: "16px", fontFamily: F.heading, fontWeight: 700 }}>Pas de conversie aan</h2>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "24px" }}>
               <div>
                 <div style={panelLabel}>Originele afbeelding</div>
-                <div style={{ background: B.white, borderRadius: "8px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
-                  <img src={origImage} alt="Original" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "4px" }} />
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
+                  <img src={origImage} alt="Original" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "6px" }} />
                 </div>
               </div>
               <div>
                 <div style={panelLabel}>Telpatroon preview ({projConfig.showEdges ? gridW + 2 : gridW} × {gridH})</div>
-                <div style={{ background: B.white, borderRadius: "8px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
-                  <canvas ref={previewRef} style={{ maxWidth: "100%", imageRendering: "pixelated", borderRadius: "4px" }} />
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
+                  <canvas ref={previewRef} style={{ maxWidth: "100%", imageRendering: "pixelated", borderRadius: "6px" }} />
                 </div>
               </div>
             </div>
@@ -1144,7 +1456,7 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.darkGreen, textTransform: "uppercase", letterSpacing: "1px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px" }}>
                     Sample swatch
                   </div>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1162,7 +1474,7 @@ export default function App() {
                     <span style={{ fontSize: "11px", color: "#777" }}>rijen</span>
                   </div>
 
-                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.darkGreen, textTransform: "uppercase", letterSpacing: "1px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px" }}>
                     Gewenste eindmaat
                   </div>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
@@ -1194,9 +1506,9 @@ export default function App() {
                     style={{
                       ...btnSm,
                       fontWeight: 700,
-                      color: calculatorResult ? B.darkGreen : "#999",
-                      borderColor: calculatorResult ? B.lightGreen : B.beige,
-                      background: calculatorResult ? "#F3FAF1" : "#F8F8F8",
+                      color: calculatorResult ? B.orange : "#999",
+                      borderColor: calculatorResult ? B.orange : B.beige,
+                      background: calculatorResult ? B.cream : "#F8F8F8",
                       cursor: calculatorResult ? "pointer" : "not-allowed",
                     }}
                   >
@@ -1233,16 +1545,21 @@ export default function App() {
         {step === "edit" && chart && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-              <h2 style={{ fontSize: "20px", color: B.darkGreen, margin: 0 }}>Bewerk je telpatroon</h2>
+              <h2 style={{ fontSize: "28px", color: B.orange, margin: 0, fontFamily: F.heading, fontWeight: 700 }}>Bewerk je telpatroon</h2>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button onClick={() => setStep("adjust")} style={btnSec}>← Conversie</button>
-                <button onClick={() => setStep("pattern")} style={btnPri}>🧶 Bekijk patroon →</button>
+                <button onClick={() => setStep("pattern")} style={btnPri}>Bekijk patroon →</button>
               </div>
             </div>
 
             {fixCount > 0 && (
-              <div style={{ background: "#FFF3E0", border: "1px solid #FFB74D", borderRadius: "8px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px" }}>
-                ⚠️ <strong>{fixCount}</strong> stokjes zijn automatisch verwijderd (stokje-op-stokje regel). Controleer het resultaat.
+              <div style={{ background: B.cream, border: `1px solid ${B.orange}`, borderRadius: "6px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px" }}>
+                Let op: <strong>{fixCount}</strong> stokjes zijn automatisch verwijderd (stokje-op-stokje regel). Controleer het resultaat.
+              </div>
+            )}
+            {ruleNotice && (
+              <div style={{ background: "#FFF8E1", border: "1px solid #F0D9A5", borderRadius: "6px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px", color: "#6F5A2C" }}>
+                {ruleNotice}
               </div>
             )}
 
@@ -1265,9 +1582,9 @@ export default function App() {
               <Panel title="Gereedschap">
                 <div style={{ display: "flex", gap: "4px" }}>
                   {[
-                    { id: "symbol", icon: "✏️", l: "Stokje" },
-                    { id: "erase", icon: "🧹", l: "Wissen" },
-                    { id: "toggle", icon: "🔄", l: "Wissel" },
+                    { id: "symbol", icon: "S", l: "Stokje" },
+                    { id: "erase", icon: "W", l: "Wissen" },
+                    { id: "toggle", icon: "T", l: "Wissel" },
                   ].map(t => (
                     <button key={t.id} onClick={() => setTool(t.id)} style={{
                       ...btnTool, background: tool === t.id ? B.orange : B.white,
@@ -1279,10 +1596,10 @@ export default function App() {
               </Panel>
               <Panel title="Acties">
                 <div style={{ display: "flex", gap: "4px" }}>
-                  <button onClick={() => setChart(chart.map(r => r.map(c => !c)))} style={btnSm}>◐ Omkeren</button>
-                  <button onClick={() => setChart(chart.map(r => [...r].reverse()))} style={btnSm}>↔ Spiegel H</button>
-                  <button onClick={() => setChart([...chart].reverse())} style={btnSm}>↕ Spiegel V</button>
-                  <button onClick={() => { const { chart: c, fixes } = validateNoStacking(chart); setChart(c); if (fixes > 0) alert(`${fixes} errors solved.`); else alert("Valid!"); }} style={btnSm}>✓ Check</button>
+                  <button onClick={() => applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true })} style={btnSm}>◐ Omkeren</button>
+                  <button onClick={() => applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true })} style={btnSm}>↔ Spiegel H</button>
+                  <button onClick={() => applyValidatedChart([...chart].reverse(), { notify: true })} style={btnSm}>↕ Spiegel V</button>
+                  <button onClick={() => applyValidatedChart(chart, { notify: true, successMessage: "Controle OK: overlay-regels kloppen." })} style={btnSm}>✓ Check</button>
                 </div>
               </Panel>
               <Panel title="Zoom">
@@ -1300,15 +1617,14 @@ export default function App() {
             </div>
 
             <div style={{ display: "flex", gap: "16px", marginBottom: "12px", fontSize: "11px", color: "#666", flexWrap: "wrap", alignItems: "center" }}>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colA.hex + "50", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Vaste {colA.name}</span>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colA.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", textAlign: "center", color: "#fff", fontSize: "8px", lineHeight: "12px" }}>✕</span> Stokje {colA.name}</span>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colB.hex + "50", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Vaste {colB.name}</span>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colB.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", textAlign: "center", color: "#fff", fontSize: "8px", lineHeight: "12px" }}>✕</span> Stokje {colB.name}</span>
+              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colA.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Kleur A: {colA.name}</span>
+              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colB.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Kleur B: {colB.name}</span>
+              <span><span style={{ display: "inline-block", width: "12px", height: "12px", border: "1px solid #aaa", verticalAlign: "middle", marginRight: "4px", textAlign: "center", color: "#333", fontSize: "8px", lineHeight: "12px", background: "#fff" }}>F</span> Symbool = stokje, zonder symbool = vaste</span>
               {projConfig.showEdges && <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: "#eee", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", borderRadius: "50%", textAlign: "center", fontSize: "8px", lineHeight: "12px" }}>●</span> Kantsteek</span>}
             </div>
 
-            <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "8px", padding: "16px", border: `1px solid ${B.beige}` }}>
-              <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} />
+            <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "6px", padding: "16px", border: `1px solid ${B.beige}` }}>
+              <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} onRuleMessage={showRuleNotice} />
             </div>
           </div>
         )}
@@ -1316,34 +1632,34 @@ export default function App() {
         {step === "pattern" && chart && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
-              <h2 style={{ fontSize: "20px", color: B.darkGreen, margin: 0 }}>Geschreven haakpatroon</h2>
+              <h2 style={{ fontSize: "28px", color: B.orange, margin: 0, fontFamily: F.heading, fontWeight: 700 }}>Geschreven haakpatroon</h2>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button onClick={() => setStep("edit")} style={btnSec}>← Editor</button>
-                <button onClick={exportText} style={btnPri}>📄 Download .txt</button>
+                <button onClick={exportText} style={btnPri}>Download .txt</button>
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "300px 1fr", gap: "20px" }}>
               <div>
                 <div style={panelLabel}>Telpatroon</div>
-                <div style={{ background: B.white, borderRadius: "8px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
                   <ChartCanvas chart={chart} setChart={setChart} cellSize={Math.max(2, Math.min(4, Math.floor(270 / Math.max(chart[0].length, chart.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
                 </div>
                 <div style={panelLabel}>Visueel resultaat (benadering)</div>
-                <div style={{ background: B.white, borderRadius: "8px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
                   <VisualPreview chart={chart} colA={colA} colB={colB} />
                 </div>
               </div>
 
               <div style={{
-                background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "8px",
+                background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "6px",
                 padding: "16px", maxHeight: "80vh", overflowY: "auto",
-                fontFamily: "'Courier New', monospace", fontSize: "10px", lineHeight: "1.5",
+                fontFamily: F.mono, fontSize: "11px", lineHeight: "1.5",
               }}>
-                <div style={{ fontWeight: "bold", fontSize: "14px", color: B.orange, marginBottom: "4px", letterSpacing: "1px", fontFamily: "Georgia, serif" }}>
+                <div style={{ fontWeight: 700, fontSize: "24px", color: B.orange, marginBottom: "4px", letterSpacing: "0.02em", fontFamily: F.heading }}>
                   GESCHREVEN TEKST
                 </div>
-                <div style={{ fontFamily: "sans-serif", fontSize: "11px", color: "#666", lineHeight: 1.6, marginBottom: "12px", paddingBottom: "12px", borderBottom: `1px solid ${B.beige}` }}>
+                <div style={{ fontFamily: F.body, fontSize: "11px", color: "#666", lineHeight: 1.6, marginBottom: "12px", paddingBottom: "12px", borderBottom: `1px solid ${B.beige}` }}>
                   <strong>Kleuren:</strong> {colA.name} (A, oneven rijen) · {colB.name} (B, even rijen)<br />
                   <strong>Richting:</strong> {projConfig.direction === "RtoL" ? "Begin Rechts (←)" : "Begin Links (→)"}<br /><br />
                   Start met {colA.name}, lossenketting van {chart[0].length + 3} lossen, start in de 2e losse met in elke losse een v [{chart[0].length + 2}]. Hecht af.
@@ -1364,49 +1680,136 @@ export default function App() {
             </div>
           </div>
         )}
+          </section>
+        </div>
       </main>
     </div>
   );
 }
 
-function Steps({ current, onSelect, canGoToStep }) {
-  const steps = [
-    { id: "upload", l: "Upload" },
-    { id: "adjust", l: "Conversie" },
-    { id: "edit", l: "Bewerken" },
-    { id: "pattern", l: "Patroon" },
-  ];
-  const idx = steps.findIndex(s => s.id === current);
-  return (
-    <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-      {steps.map((s, i) => (
-        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <button
-            onClick={() => onSelect?.(s.id)}
-            disabled={!canGoToStep?.[s.id]}
-            style={{
-              display: "flex", alignItems: "center", gap: "4px",
-              background: i === idx ? B.orange : i < idx ? B.lightGreen : "rgba(255,255,255,0.15)",
-              borderRadius: "12px", padding: "3px 10px", border: "none",
-              opacity: canGoToStep?.[s.id] ? 1 : 0.55,
-              cursor: canGoToStep?.[s.id] ? "pointer" : "not-allowed",
-            }}
-            title={canGoToStep?.[s.id] ? `Ga naar ${s.l}` : `${s.l} is nog niet beschikbaar`}
-          >
-            <span style={{ color: B.white, fontSize: "10px", fontWeight: 700 }}>{i + 1}</span>
-            <span style={{ color: B.white, fontSize: "10px", display: i === idx ? "inline" : "none" }}>{s.l}</span>
-          </button>
-          {i < 3 && <div style={{ width: "12px", height: "1px", background: "rgba(255,255,255,0.25)" }} />}
-        </div>
-      ))}
-    </div>
-  );
+function MenuIcon({ name }) {
+  const base = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  };
+
+  if (name === "upload") {
+    return (
+      <svg {...base}>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <circle cx="9" cy="10" r="1.3" />
+        <path d="M5.5 17l5-4 3 2 4.5-4" />
+      </svg>
+    );
+  }
+  if (name === "adjust") {
+    return (
+      <svg {...base}>
+        <path d="M4 7h16" />
+        <path d="M4 17h16" />
+        <circle cx="9" cy="7" r="2" />
+        <circle cx="15" cy="17" r="2" />
+      </svg>
+    );
+  }
+  if (name === "edit") {
+    return (
+      <svg {...base}>
+        <path d="M4 20l4-.8L19 8.2 15.8 5 4.8 16z" />
+        <path d="M14.8 6l3.2 3.2" />
+      </svg>
+    );
+  }
+  if (name === "pattern") {
+    return (
+      <svg {...base}>
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M4 10h16M10 4v16M16 4v16" />
+      </svg>
+    );
+  }
+  if (name === "new") {
+    return (
+      <svg {...base}>
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M12 8v8M8 12h8" />
+      </svg>
+    );
+  }
+  if (name === "save") {
+    return (
+      <svg {...base}>
+        <path d="M5 4h12l2 2v14H5z" />
+        <path d="M8 4v6h8V4" />
+        <path d="M8 20v-6h8v6" />
+      </svg>
+    );
+  }
+  if (name === "settings") {
+    return (
+      <svg {...base}>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 5v2M12 17v2M5 12h2M17 12h2M7.2 7.2l1.4 1.4M15.4 15.4l1.4 1.4M16.8 7.2l-1.4 1.4M8.6 15.4l-1.4 1.4" />
+      </svg>
+    );
+  }
+  if (name === "library") {
+    return (
+      <svg {...base}>
+        <path d="M4 6a2 2 0 0 1 2-2h6v16H6a2 2 0 0 0-2 2z" />
+        <path d="M20 6a2 2 0 0 0-2-2h-6v16h6a2 2 0 0 1 2 2z" />
+      </svg>
+    );
+  }
+  if (name === "folders") {
+    return (
+      <svg {...base}>
+        <path d="M3 8h7l2 2h9v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <path d="M3 8V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2" />
+      </svg>
+    );
+  }
+  if (name === "login") {
+    return (
+      <svg {...base}>
+        <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+        <path d="M14 8l5 4-5 4" />
+        <path d="M19 12H9" />
+      </svg>
+    );
+  }
+  if (name === "logout") {
+    return (
+      <svg {...base}>
+        <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+        <path d="M14 8l5 4-5 4" />
+        <path d="M19 12H9" />
+      </svg>
+    );
+  }
+  if (name === "delete") {
+    return (
+      <svg {...base}>
+        <path d="M4 7h16" />
+        <path d="M9 7V5h6v2" />
+        <path d="M7 7l1 13h8l1-13" />
+        <path d="M10 11v6M14 11v6" />
+      </svg>
+    );
+  }
+  return null;
 }
 
 function Panel({ title, children }) {
   return (
-    <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "8px", padding: "10px 14px" }}>
-      <div style={{ fontSize: "9px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: B.darkGreen, marginBottom: "6px" }}>{title}</div>
+    <div style={{ background: B.white, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "10px 14px", boxShadow: "0 4px 6px rgba(0,0,0,0.08)" }}>
+      <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "0.02em", color: B.orange, marginBottom: "8px", fontFamily: F.heading }}>{title}</div>
       {children}
     </div>
   );
@@ -1418,7 +1821,7 @@ function ColorPick({ label, color, set }) {
       <span style={{ fontSize: "9px", color: "#888" }}>{label}</span>
       <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
         <input type="color" value={color.hex} onChange={e => set({ ...color, hex: e.target.value })}
-          style={{ width: "26px", height: "26px", border: "none", borderRadius: "5px", cursor: "pointer", padding: 0 }} />
+          style={{ width: "26px", height: "26px", border: "none", borderRadius: "6px", cursor: "pointer", padding: 0 }} />
         <input type="text" value={color.name} onChange={e => set({ ...color, name: e.target.value })}
           style={{ ...inp, width: "80px", fontSize: "11px" }} placeholder="Naam" />
       </div>
@@ -1426,11 +1829,22 @@ function ColorPick({ label, color, set }) {
   );
 }
 
-const panelLabel = { fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1.5px", color: B.darkGreen, marginBottom: "8px" };
+const panelLabel = { fontSize: "16px", fontWeight: 700, letterSpacing: "0.02em", color: B.orange, marginBottom: "8px", fontFamily: F.heading };
 const lbl = { fontSize: "12px", fontWeight: 600, color: B.brown };
-const inp = { width: "55px", padding: "4px 6px", border: `1px solid ${B.beige}`, borderRadius: "5px", fontSize: "12px", background: B.cream, outline: "none", textAlign: "center" };
-const btnHead = { background: "rgba(255,255,255,0.14)", color: B.white, border: "1px solid rgba(255,255,255,0.28)", borderRadius: "6px", padding: "6px 10px", fontSize: "11px", fontWeight: 700, cursor: "pointer" };
-const btnPri = { background: `linear-gradient(135deg, ${B.orange}, ${B.orangeLight})`, color: B.white, border: "none", borderRadius: "8px", padding: "10px 24px", fontSize: "14px", fontWeight: 700, cursor: "pointer", boxShadow: `0 3px 12px ${B.orange}40` };
-const btnSec = { background: B.white, color: B.dark, border: `1px solid ${B.beige}`, borderRadius: "8px", padding: "10px 20px", fontSize: "13px", fontWeight: 600, cursor: "pointer" };
+const inp = { width: "55px", padding: "4px 6px", border: `1px solid ${B.beige}`, borderRadius: "6px", fontSize: "12px", background: B.white, outline: "none", textAlign: "center", color: B.dark };
+const btnHead = { background: B.white, color: B.orange, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "8px 12px", fontSize: "12px", fontWeight: 700, cursor: "pointer" };
+const btnPri = { background: B.orange, color: B.white, border: `1px solid ${B.orange}`, borderRadius: "6px", padding: "10px 24px", fontSize: "14px", fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 6px rgba(0,0,0,0.08)" };
+const btnSec = { background: B.white, color: B.dark, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "10px 20px", fontSize: "13px", fontWeight: 600, cursor: "pointer" };
 const btnTool = { border: "1.5px solid", borderRadius: "6px", padding: "5px 10px", fontSize: "11px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" };
-const btnSm = { background: "transparent", border: `1px solid ${B.beige}`, borderRadius: "5px", padding: "4px 8px", fontSize: "11px", cursor: "pointer", color: B.brown, whiteSpace: "nowrap" };
+const btnSm = { background: B.white, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "8px 12px", fontSize: "13px", cursor: "pointer", color: B.brown, whiteSpace: "nowrap" };
+const sidebarWrap = { position: "sticky", top: "84px" };
+const sidebarSection = { background: B.white, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "12px" };
+const sidebarTitle = { fontSize: "16px", fontWeight: 700, letterSpacing: "0.02em", color: B.orange, marginBottom: "10px", fontFamily: F.heading };
+const btnSidebar = { background: B.white, border: `1px solid ${B.border}`, borderRadius: "6px", padding: "12px 14px", fontSize: "14px", textAlign: "left", color: B.dark, cursor: "pointer", width: "100%", display: "flex", alignItems: "center", gap: "10px" };
+const sidebarIconWrap = { width: "18px", color: "#6f6c75", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+const sidebarCloudCard = { marginTop: "auto", background: B.cream, border: `1px solid ${B.border}`, borderRadius: "8px", padding: "12px", boxShadow: "0 4px 10px rgba(0,0,0,0.05)" };
+const sidebarCloudHeader = { display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" };
+const sidebarCloudDot = { width: "10px", height: "10px", borderRadius: "999px", boxShadow: "0 0 0 2px rgba(255,255,255,0.9)" };
+const sidebarCloudTitle = { fontSize: "13px", fontWeight: 700, color: B.orange };
+const sidebarCloudState = { fontSize: "12px", fontWeight: 700, color: B.dark, marginBottom: "4px" };
+const sidebarCloudText = { fontSize: "11px", color: "#6f6c75", lineHeight: 1.4, overflowWrap: "anywhere" };

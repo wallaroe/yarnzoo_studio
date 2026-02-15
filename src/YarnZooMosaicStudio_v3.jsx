@@ -812,7 +812,7 @@ function generateWrittenPattern(chart, colA, colB, direction = "RtoL", textSet =
 // ============================================================
 // Chart Canvas — shows colored grid with symbols
 // ============================================================
-function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config = { direction: "RtoL", showEdges: true }, onRuleMessage }) {
+function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config = { direction: "RtoL", showEdges: true }, onRuleMessage, onDrawStart }) {
   const ref = useRef(null);
   const drawing = useRef(false);
   const lastCell = useRef(null);
@@ -1078,6 +1078,7 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
   const onDown = (e) => {
     if (mode !== "edit") return;
     e.preventDefault(); drawing.current = true;
+    onDrawStart?.();
     const c = getCell(e); if (c) { lastCell.current = c; paint(c.x, c.y); }
   };
   const onMove = (e) => {
@@ -1198,6 +1199,11 @@ export default function App() {
   const [translationCloudStatus, setTranslationCloudStatus] = useState(hasSupabaseConfig ? "loading" : "local");
   const ruleNoticeTimer = useRef(null);
 
+  // Undo/Redo history
+  const historyRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const MAX_HISTORY = 50;
+
   // Project Settings
   const [projConfig, setProjConfig] = useState({
     direction: "RtoL", // "RtoL" | "LtoR"
@@ -1257,6 +1263,49 @@ export default function App() {
 
     return fixes;
   }, [showRuleNotice]);
+
+  // Undo/Redo functions
+  const pushHistory = useCallback((chartSnapshot) => {
+    if (!chartSnapshot) return;
+    const copy = chartSnapshot.map(r => [...r]);
+    const idx = historyIndexRef.current;
+    // Trim future states if we branched
+    historyRef.current = historyRef.current.slice(0, idx + 1);
+    historyRef.current.push(copy);
+    // Enforce max history size
+    if (historyRef.current.length > MAX_HISTORY) {
+      historyRef.current = historyRef.current.slice(historyRef.current.length - MAX_HISTORY);
+    }
+    historyIndexRef.current = historyRef.current.length - 1;
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+    // Save current state at the end if we're at the tip
+    if (historyIndexRef.current === historyRef.current.length - 1 && chart) {
+      const currentCopy = chart.map(r => [...r]);
+      // Only push if different from last saved
+      const last = historyRef.current[historyRef.current.length - 1];
+      const isDiff = !last || last.length !== currentCopy.length || last.some((r, i) => r.some((c, j) => c !== currentCopy[i][j]));
+      if (isDiff) {
+        historyRef.current.push(currentCopy);
+        historyIndexRef.current = historyRef.current.length - 1;
+      }
+    }
+    historyIndexRef.current -= 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    if (snapshot) setChart(snapshot.map(r => [...r]));
+  }, [chart]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    const snapshot = historyRef.current[historyIndexRef.current];
+    if (snapshot) setChart(snapshot.map(r => [...r]));
+  }, []);
+
+  const canUndo = historyRef.current.length > 0 && historyIndexRef.current > 0;
+  const canRedo = historyIndexRef.current < historyRef.current.length - 1;
 
   const languageEntries = Object.entries(patternTexts);
   const applyPaletteColor = useCallback((entry, setColor, fallback) => {
@@ -1397,6 +1446,19 @@ export default function App() {
   useEffect(() => {
     if (!patternTexts[patternLanguage]) setPatternLanguage("nl");
   }, [patternTexts, patternLanguage]);
+
+  // Undo/Redo keyboard shortcuts
+  useEffect(() => {
+    const handler = (e) => {
+      if (step !== "edit") return;
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      if (isMod && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
+      if (isMod && e.key === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [step, undo, redo]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase || !authReady) return;
@@ -2732,10 +2794,12 @@ export default function App() {
                 </div>
               </Panel>
               <Panel title="Acties">
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <button onClick={() => applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true })} style={btnSm}>◐ Omkeren</button>
-                  <button onClick={() => applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true })} style={btnSm}>↔ Spiegel H</button>
-                  <button onClick={() => applyValidatedChart([...chart].reverse(), { notify: true })} style={btnSm}>↕ Spiegel V</button>
+                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                  <button onClick={undo} disabled={!canUndo} style={{ ...btnSm, opacity: canUndo ? 1 : 0.4 }} title="Ongedaan maken (Cmd+Z)">↩ Undo</button>
+                  <button onClick={redo} disabled={!canRedo} style={{ ...btnSm, opacity: canRedo ? 1 : 0.4 }} title="Opnieuw (Cmd+Shift+Z)">↪ Redo</button>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐ Omkeren</button>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true }); }} style={btnSm}>↔ Spiegel H</button>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart([...chart].reverse(), { notify: true }); }} style={btnSm}>↕ Spiegel V</button>
                   <button onClick={() => applyValidatedChart(chart, { notify: true, successMessage: "Controle OK: overlay-regels kloppen." })} style={btnSm}>✓ Check</button>
                 </div>
               </Panel>
@@ -2761,7 +2825,7 @@ export default function App() {
             </div>
 
             <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "6px", padding: "16px", border: `1px solid ${B.beige}` }}>
-              <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} onRuleMessage={showRuleNotice} />
+              <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} onRuleMessage={showRuleNotice} onDrawStart={() => pushHistory(chart)} />
             </div>
           </div>
         )}

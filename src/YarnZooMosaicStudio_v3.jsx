@@ -754,12 +754,13 @@ function imageToChart(img, targetW, targetH, threshold) {
 // ============================================================
 // Pattern Generation
 // ============================================================
-function generateWrittenPattern(chart, colA, colB, direction = "RtoL", textSet = DEFAULT_PATTERN_TEXTS.nl) {
+function generateWrittenPattern(chart, colA, colB, direction = "RtoL", textSet = DEFAULT_PATTERN_TEXTS.nl, startRow = 0, endRow = null) {
   const h = chart.length, w = chart[0].length;
+  const effectiveEnd = endRow ?? h;
   const rows = [];
   const t = textSet || DEFAULT_PATTERN_TEXTS.nl;
 
-  for (let rowNum = 1; rowNum <= h; rowNum++) {
+  for (let rowNum = startRow + 1; rowNum <= effectiveEnd; rowNum++) {
     // Row 1 is bottom of chart = chart[h-1]
     const chartY = h - rowNum;
     const colorIdx = getRowColor(rowNum - 1);
@@ -1185,6 +1186,11 @@ export default function App() {
   const [printMode, setPrintMode] = useState("multi");
   const [printMarginMm, setPrintMarginMm] = useState(8);
   const [printCellMm, setPrintCellMm] = useState(3.2);
+  const [splitMode, setSplitMode] = useState("equal");
+  const [splitCount, setSplitCount] = useState(3);
+  const [splitRowSize, setSplitRowSize] = useState(50);
+  const [splitPoints, setSplitPoints] = useState([]);
+  const [activeSectionTab, setActiveSectionTab] = useState("full");
   const [patternLanguage, setPatternLanguage] = useState("nl");
   const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
   const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
@@ -1983,6 +1989,13 @@ export default function App() {
 
   const patternText = patternTexts[patternLanguage] || patternTexts.nl || normalizePatternTexts(null).nl;
   const patternRows = chart ? generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText) : [];
+  const sectionedPatternRows = useMemo(() => {
+    if (!chart || chartSections.length <= 1) return null;
+    return chartSections.map(s => ({
+      ...s,
+      rows: generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText, s.startRow, s.endRow),
+    }));
+  }, [chart, chartSections, colA, colB, projConfig.direction, patternText]);
   const printLayout = chart
     ? computePrintLayout({
       chartWidth: chart[0].length,
@@ -2032,6 +2045,35 @@ export default function App() {
       colorBPercent: ((colorBCells / totalCells) * 100).toFixed(0),
     };
   }, [chart]);
+
+  const chartSections = useMemo(() => {
+    if (!chart) return [];
+    const h = chart.length;
+    let cuts = [];
+    if (splitMode === "equal") {
+      const size = Math.ceil(h / splitCount);
+      for (let i = 1; i < splitCount; i++) cuts.push(Math.min(i * size, h));
+    } else if (splitMode === "fixed") {
+      for (let r = splitRowSize; r < h; r += splitRowSize) cuts.push(r);
+    } else {
+      cuts = [...splitPoints].sort((a, b) => a - b);
+    }
+    const sections = [];
+    let prev = 0;
+    for (const cut of cuts) {
+      if (cut > prev && cut < h) {
+        sections.push({ startRow: prev, endRow: cut });
+        prev = cut;
+      }
+    }
+    sections.push({ startRow: prev, endRow: h });
+    return sections.map((s, i) => ({
+      ...s,
+      label: `Deel ${i + 1} van ${sections.length}`,
+      chartSlice: chart.slice(s.startRow, s.endRow),
+      rowOffset: s.startRow,
+    }));
+  }, [chart, splitMode, splitCount, splitRowSize, splitPoints]);
 
   const goToStep = (nextStep) => {
     if (!canGoToStep[nextStep]) return;
@@ -2172,7 +2214,16 @@ export default function App() {
       `${t.writtenTitle}:`,
       ``,
     ].join("\n");
-    const txt = hdr + patternRows.join("\n");
+    let body;
+    if (sectionedPatternRows && sectionedPatternRows.length > 1) {
+      const parts = sectionedPatternRows.map(sec =>
+        `=== ${sec.label.toUpperCase()} (rij ${chart.length - sec.endRow + 1}–${chart.length - sec.startRow}) ===\n\n` + sec.rows.join("\n")
+      );
+      body = parts.join("\n\n") + "\n\n=== VOLLEDIG PATROON ===\n\n" + patternRows.join("\n");
+    } else {
+      body = patternRows.join("\n");
+    }
+    const txt = hdr + body;
     const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = `${t.fileName}.txt`; a.click();
@@ -3031,15 +3082,76 @@ export default function App() {
         {step === "pattern" && chart && (
           <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "280px minmax(0,1fr) 260px", gap: "16px", alignItems: "start" }}>
 
-            {/* LEFT: Chart previews */}
-            <div>
-              <div style={panelLabel}>Telpatroon</div>
-              <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
-                <ChartCanvas chart={chart} setChart={setChart} cellSize={Math.max(2, Math.min(4, Math.floor(250 / Math.max(chart[0].length, chart.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
-              </div>
-              <div style={panelLabel}>Visueel resultaat</div>
-              <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
-                <VisualPreview chart={chart} colA={colA} colB={colB} />
+            {/* LEFT: Section settings + chart previews */}
+            <div style={{ maxHeight: isMobile ? "none" : "85vh", overflowY: isMobile ? "visible" : "auto" }}>
+              <Panel title="Chart secties">
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <span style={lbl}>Modus:</span>
+                    <select value={splitMode} onChange={e => setSplitMode(e.target.value)} style={{ ...inp, width: "100%", textAlign: "left" }}>
+                      <option value="equal">Gelijke delen</option>
+                      <option value="fixed">Vaste rij-grootte</option>
+                      <option value="manual">Handmatig</option>
+                    </select>
+                  </div>
+                  {splitMode === "equal" && (
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Aantal:</span>
+                      <input type="number" min={2} max={10} value={splitCount} onChange={e => setSplitCount(Math.max(2, Math.min(10, parseInt(e.target.value) || 2)))} style={inp} />
+                      <span style={{ fontSize: "11px", color: "#888" }}>delen</span>
+                    </div>
+                  )}
+                  {splitMode === "fixed" && (
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Rijen:</span>
+                      <input type="number" min={10} max={200} value={splitRowSize} onChange={e => setSplitRowSize(Math.max(10, Math.min(200, parseInt(e.target.value) || 10)))} style={inp} />
+                      <span style={{ fontSize: "11px", color: "#888" }}>per sectie</span>
+                    </div>
+                  )}
+                  {splitMode === "manual" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <div style={{ fontSize: "11px", color: "#666" }}>Knippunten (rijnummer):</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                        {splitPoints.map((pt, i) => (
+                          <span key={i} style={{ background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "4px", padding: "2px 8px", fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            rij {pt}
+                            <button onClick={() => setSplitPoints(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#c00", cursor: "pointer", fontSize: "11px", padding: 0 }}>x</button>
+                          </span>
+                        ))}
+                        <button onClick={() => {
+                          const val = prompt(`Knippunt na rij (1-${chart.length - 1}):`);
+                          const num = parseInt(val);
+                          if (num > 0 && num < chart.length && !splitPoints.includes(num)) setSplitPoints(prev => [...prev, num]);
+                        }} style={{ ...btnSm, padding: "2px 8px", fontSize: "11px" }}>+ Knip</button>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ fontSize: "11px", color: "#888", borderTop: `1px solid ${B.border}`, paddingTop: "6px" }}>
+                    {chartSections.length} {chartSections.length === 1 ? "sectie" : "secties"} · {chart.length} rijen totaal
+                  </div>
+                </div>
+              </Panel>
+
+              {chartSections.length > 1 && chartSections.map((sec, i) => (
+                <div key={i} style={{ marginTop: "8px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: B.orange, marginBottom: "4px" }}>
+                    {sec.label} (rij {chart.length - sec.endRow + 1}–{chart.length - sec.startRow})
+                  </div>
+                  <div style={{ background: B.white, borderRadius: "6px", padding: "8px", border: `1px solid ${B.beige}` }}>
+                    <ChartCanvas chart={sec.chartSlice} setChart={setChart} cellSize={Math.max(2, Math.min(3, Math.floor(250 / Math.max(chart[0].length, sec.chartSlice.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ marginTop: "12px" }}>
+                <div style={panelLabel}>Totaaloverzicht</div>
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                  <ChartCanvas chart={chart} setChart={setChart} cellSize={Math.max(2, Math.min(4, Math.floor(250 / Math.max(chart[0].length, chart.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
+                </div>
+                <div style={panelLabel}>Visueel resultaat</div>
+                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                  <VisualPreview chart={chart} colA={colA} colB={colB} />
+                </div>
               </div>
             </div>
 
@@ -3057,18 +3169,57 @@ export default function App() {
                 <strong>{patternText.directionLabelInline}:</strong> {projConfig.direction === "RtoL" ? patternText.directionRtoL : patternText.directionLtoR}<br /><br />
                 <strong>{patternText.startLabelInline}:</strong> {templateText(patternText.startInlineTemplate, { name: colA.name, chainCount: chart[0].length + 3, stitchCount: chart[0].length + 2 })}
               </div>
-              {patternRows.map((r, i) => {
-                const rowNum = i + 1;
-                const colorIdx = getRowColor(rowNum - 1);
-                return (
-                  <div key={i} style={{
-                    padding: "3px 8px",
-                    background: i % 2 === 0 ? "transparent" : B.beige,
-                    borderRadius: "2px", marginBottom: "1px", wordBreak: "break-all",
-                    borderLeft: `3px solid ${colorIdx === 0 ? colA.hex : colB.hex}`,
-                  }}>{r}</div>
-                );
-              })}
+
+              {/* Section tabs */}
+              {sectionedPatternRows && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "12px", paddingBottom: "8px", borderBottom: `1px solid ${B.beige}` }}>
+                  <button
+                    onClick={() => setActiveSectionTab("full")}
+                    style={{
+                      ...btnSm, padding: "4px 12px", fontSize: "11px",
+                      background: activeSectionTab === "full" ? B.orange : B.white,
+                      color: activeSectionTab === "full" ? B.white : B.dark,
+                      borderColor: activeSectionTab === "full" ? B.orange : B.border,
+                      fontWeight: activeSectionTab === "full" ? 700 : 400,
+                    }}
+                  >Volledig</button>
+                  {sectionedPatternRows.map((sec, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSectionTab(i)}
+                      style={{
+                        ...btnSm, padding: "4px 12px", fontSize: "11px",
+                        background: activeSectionTab === i ? B.orange : B.white,
+                        color: activeSectionTab === i ? B.white : B.dark,
+                        borderColor: activeSectionTab === i ? B.orange : B.border,
+                        fontWeight: activeSectionTab === i ? 700 : 400,
+                      }}
+                    >Deel {i + 1}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* Pattern rows — full or section */}
+              {(() => {
+                const displayRows = (activeSectionTab !== "full" && sectionedPatternRows && sectionedPatternRows[activeSectionTab])
+                  ? sectionedPatternRows[activeSectionTab].rows
+                  : patternRows;
+                const rowOffset = (activeSectionTab !== "full" && sectionedPatternRows && sectionedPatternRows[activeSectionTab])
+                  ? sectionedPatternRows[activeSectionTab].startRow
+                  : 0;
+                return displayRows.map((r, i) => {
+                  const rowNum = rowOffset + i + 1;
+                  const colorIdx = getRowColor(rowNum - 1);
+                  return (
+                    <div key={i} style={{
+                      padding: "3px 8px",
+                      background: i % 2 === 0 ? "transparent" : B.beige,
+                      borderRadius: "2px", marginBottom: "1px", wordBreak: "break-all",
+                      borderLeft: `3px solid ${colorIdx === 0 ? colA.hex : colB.hex}`,
+                    }}>{r}</div>
+                  );
+                });
+              })()}
             </div>
 
             {/* RIGHT SIDEBAR: Print settings & export */}

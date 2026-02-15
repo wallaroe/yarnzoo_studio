@@ -2246,17 +2246,8 @@ export default function App() {
     }
     setPdfGenerating(true);
     try {
-      // --- Font loading ---
-      const [camptonModule, sketchModule] = await Promise.all([
-        import("./fonts/CamptonMedium.js"),
-        import("./fonts/SketchSolid.js"),
-      ]);
+      // --- PDF Setup (using built-in Helvetica fonts) ---
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      // Register fonts
-      doc.addFileToVFS("CamptonMedium.ttf", camptonModule.CamptonMediumFont);
-      doc.addFont("CamptonMedium.ttf", "CamptonMedium", "normal");
-      doc.addFileToVFS("SketchSolid.ttf", sketchModule.SketchSolidFont);
-      doc.addFont("SketchSolid.ttf", "SketchSolid", "normal");
 
       const pw = 210, ph = 297; // A4 mm
       const margin = 15;
@@ -2274,7 +2265,7 @@ export default function App() {
       };
 
       const addFooter = (num) => {
-        doc.setFont("CamptonMedium", "normal");
+        doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(...darkText);
         doc.text(`© ${new Date().getFullYear()} YarnZoo — www.yarnzoocrochet.com`, margin, ph - 8);
@@ -2282,7 +2273,7 @@ export default function App() {
       };
 
       const addHeader = (text1, text2) => {
-        doc.setFont("SketchSolid", "normal");
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(28);
         doc.setTextColor(...orange);
         doc.text(text1, margin, 22);
@@ -2300,26 +2291,26 @@ export default function App() {
       doc.setFillColor(...orange);
       doc.rect(0, 0, pw, 3, "F");
       // Logo text
-      doc.setFont("SketchSolid", "normal");
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(36);
       doc.setTextColor(...orange);
       doc.text("YarnZoo", pw / 2, 35, { align: "center" });
       // Subtitle "HAAKPATROON"
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(...darkText);
       doc.text("HAAKPATROON", pw / 2, 45, { align: "center" });
       // Pattern name in orange circle area
       doc.setFillColor(...orange);
       doc.circle(pw / 2, 75, 30, "F");
-      doc.setFont("SketchSolid", "normal");
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
       doc.setTextColor(255, 255, 255);
       // Split long titles
       const titleLines = doc.splitTextToSize(title.toUpperCase(), 50);
       doc.text(titleLines, pw / 2, 72 - (titleLines.length - 1) * 4, { align: "center" });
       // Subtitle
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(255, 255, 255);
       doc.text(pdfSubtitle, pw / 2, 82, { align: "center" });
@@ -2330,7 +2321,7 @@ export default function App() {
         doc.text(`${chart[0].length} x ${chart.length} steken`, pw / 2, 120, { align: "center" });
       }
       // Footer on cover
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(...darkText);
       doc.text("Inclusief online instructievideo's", pw / 2, ph - 20, { align: "center" });
@@ -2341,14 +2332,14 @@ export default function App() {
       addPageBg();
       pageNum++;
       // Title
-      doc.setFont("SketchSolid", "normal");
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(24);
       doc.setTextColor(...orange);
       const introTitle = title.toUpperCase();
       doc.text(introTitle, margin, 22);
       let y = 34;
       // Materials section
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(...orange);
       doc.text("MATERIAAL", margin, y);
@@ -2471,7 +2462,7 @@ export default function App() {
           doc.setFillColor(cr, cg, cb);
           doc.rect(margin, ry - 2.5, 1.2, wpLineHeight, "F");
 
-          doc.setFont("CamptonMedium", "normal");
+          doc.setFont("helvetica", "normal");
           doc.setFontSize(wpFontSize);
           doc.setTextColor(...darkText);
           // Truncate long rows to fit
@@ -2519,7 +2510,7 @@ export default function App() {
           const secName = (chartTitle || "PATROON").toUpperCase();
           addHeader(secName, "TELPATROON");
           // Section info
-          doc.setFont("CamptonMedium", "normal");
+          doc.setFont("helvetica", "normal");
           doc.setFontSize(9);
           doc.setTextColor(...darkText);
           doc.text(`${sec.label} — rij ${chart.length - sec.endRow + 1} t/m ${chart.length - sec.startRow}`, margin, 30);
@@ -2550,7 +2541,7 @@ export default function App() {
       pageNum++;
       addHeader("ENVELOP", "RAND");
       let fy = 34;
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(...darkText);
       if (pdfFinishText.trim()) {
@@ -2570,12 +2561,12 @@ export default function App() {
       addPageBg();
       pageNum++;
       // Logo centered
-      doc.setFont("SketchSolid", "normal");
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(32);
       doc.setTextColor(...orange);
       doc.text("YarnZoo", pw / 2, ph / 2, { align: "center" });
       // Contact info
-      doc.setFont("CamptonMedium", "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(...darkText);
       doc.text("info@yarnzoocrochet.com", pw / 2, ph / 2 + 12, { align: "center" });

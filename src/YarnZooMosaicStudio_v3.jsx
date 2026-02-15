@@ -2822,10 +2822,11 @@ export default function App() {
               {projConfig.showEdges && <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: "#eee", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", borderRadius: "50%", textAlign: "center", fontSize: "8px", lineHeight: "12px" }}>●</span> Kantsteek</span>}
             </div>
 
-            <div style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
-              <button onClick={undo} disabled={!canUndo} style={{ ...btnSm, opacity: canUndo ? 1 : 0.35, fontSize: "13px", padding: "6px 14px" }} title="Ongedaan maken (Cmd+Z)">↩ Ongedaan maken</button>
-              <button onClick={redo} disabled={!canRedo} style={{ ...btnSm, opacity: canRedo ? 1 : 0.35, fontSize: "13px", padding: "6px 14px" }} title="Opnieuw (Cmd+Shift+Z)">↪ Opnieuw</button>
-              {ruleNotice && <span style={{ fontSize: "11px", color: B.orangeHover, fontWeight: 600, marginLeft: "8px" }}>{ruleNotice}</span>}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "10px", alignItems: "center", background: B.cream, padding: "10px 14px", borderRadius: "8px", border: `1px solid ${B.beige}` }}>
+              <button onClick={undo} disabled={!canUndo} style={{ background: canUndo ? B.orange : B.beige, color: canUndo ? B.white : "#999", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "14px", fontWeight: 700, cursor: canUndo ? "pointer" : "default" }} title="Ongedaan maken (Cmd+Z)">↩ Ongedaan maken</button>
+              <button onClick={redo} disabled={!canRedo} style={{ background: canRedo ? B.orange : B.beige, color: canRedo ? B.white : "#999", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "14px", fontWeight: 700, cursor: canRedo ? "pointer" : "default" }} title="Opnieuw (Cmd+Shift+Z)">↪ Opnieuw</button>
+              <span style={{ fontSize: "11px", color: "#999", marginLeft: "auto" }}>Cmd+Z / Cmd+Shift+Z</span>
+              {ruleNotice && <span style={{ fontSize: "12px", color: B.orangeHover, fontWeight: 600 }}>{ruleNotice}</span>}
             </div>
 
             <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "6px", padding: "16px", border: `1px solid ${B.beige}` }}>

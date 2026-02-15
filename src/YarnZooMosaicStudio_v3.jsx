@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
+import jsPDF from "jspdf";
 
 // ============================================================
 // YARNZOO MOSAIC STUDIO v0.3.1 — Edge Stitches & RtoL Config
@@ -1191,6 +1192,11 @@ export default function App() {
   const [splitRowSize, setSplitRowSize] = useState(50);
   const [splitPoints, setSplitPoints] = useState([]);
   const [activeSectionTab, setActiveSectionTab] = useState("full");
+  const [pdfIntroText, setPdfIntroText] = useState("");
+  const [pdfMaterialText, setPdfMaterialText] = useState("");
+  const [pdfFinishText, setPdfFinishText] = useState("");
+  const [pdfSubtitle, setPdfSubtitle] = useState("Overlay Mozaïek Deken");
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [patternLanguage, setPatternLanguage] = useState("nl");
   const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
   const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
@@ -2230,6 +2236,366 @@ export default function App() {
     a.href = URL.createObjectURL(blob); a.download = `${t.fileName}.txt`; a.click();
   };
 
+  // ============================================================
+  // PDF Generator — Generates branded YarnZoo pattern PDF
+  // ============================================================
+  const generatePatternPDF = async () => {
+    if (!chart || !patternRows || patternRows.length === 0) {
+      alert("Er is geen patroon om te exporteren als PDF.");
+      return;
+    }
+    setPdfGenerating(true);
+    try {
+      // --- Font loading ---
+      const [camptonModule, sketchModule] = await Promise.all([
+        import("./fonts/CamptonMedium.js"),
+        import("./fonts/SketchSolid.js"),
+      ]);
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      // Register fonts
+      doc.addFileToVFS("CamptonMedium.ttf", camptonModule.CamptonMediumFont);
+      doc.addFont("CamptonMedium.ttf", "CamptonMedium", "normal");
+      doc.addFileToVFS("SketchSolid.ttf", sketchModule.SketchSolidFont);
+      doc.addFont("SketchSolid.ttf", "SketchSolid", "normal");
+
+      const pw = 210, ph = 297; // A4 mm
+      const margin = 15;
+      const contentW = pw - margin * 2;
+      const cream = [245, 240, 232]; // warm crème background RGB
+      const orange = [231, 64, 22]; // #E74016
+      const darkText = [68, 66, 73]; // #444249
+      const title = chartTitle || "Naamloze chart";
+      const t = patternText;
+      let pageNum = 0;
+
+      const addPageBg = () => {
+        doc.setFillColor(...cream);
+        doc.rect(0, 0, pw, ph, "F");
+      };
+
+      const addFooter = (num) => {
+        doc.setFont("CamptonMedium", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...darkText);
+        doc.text(`© ${new Date().getFullYear()} YarnZoo — www.yarnzoocrochet.com`, margin, ph - 8);
+        doc.text(String(num), pw - margin, ph - 8, { align: "right" });
+      };
+
+      const addHeader = (text1, text2) => {
+        doc.setFont("SketchSolid", "normal");
+        doc.setFontSize(28);
+        doc.setTextColor(...orange);
+        doc.text(text1, margin, 22);
+        if (text2) {
+          doc.setFontSize(28);
+          doc.setTextColor(180, 180, 170);
+          const w1 = doc.getTextWidth(text1);
+          doc.text(" " + text2, margin + w1, 22);
+        }
+      };
+
+      // ---- PAGE 1: Cover ----
+      addPageBg();
+      // Orange accent line at top
+      doc.setFillColor(...orange);
+      doc.rect(0, 0, pw, 3, "F");
+      // Logo text
+      doc.setFont("SketchSolid", "normal");
+      doc.setFontSize(36);
+      doc.setTextColor(...orange);
+      doc.text("YarnZoo", pw / 2, 35, { align: "center" });
+      // Subtitle "HAAKPATROON"
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...darkText);
+      doc.text("HAAKPATROON", pw / 2, 45, { align: "center" });
+      // Pattern name in orange circle area
+      doc.setFillColor(...orange);
+      doc.circle(pw / 2, 75, 30, "F");
+      doc.setFont("SketchSolid", "normal");
+      doc.setFontSize(16);
+      doc.setTextColor(255, 255, 255);
+      // Split long titles
+      const titleLines = doc.splitTextToSize(title.toUpperCase(), 50);
+      doc.text(titleLines, pw / 2, 72 - (titleLines.length - 1) * 4, { align: "center" });
+      // Subtitle
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text(pdfSubtitle, pw / 2, 82, { align: "center" });
+      // Dimensions
+      if (chart) {
+        doc.setFontSize(9);
+        doc.setTextColor(...darkText);
+        doc.text(`${chart[0].length} x ${chart.length} steken`, pw / 2, 120, { align: "center" });
+      }
+      // Footer on cover
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...darkText);
+      doc.text("Inclusief online instructievideo's", pw / 2, ph - 20, { align: "center" });
+      pageNum = 1;
+
+      // ---- PAGE 2: Introduction ----
+      doc.addPage();
+      addPageBg();
+      pageNum++;
+      // Title
+      doc.setFont("SketchSolid", "normal");
+      doc.setFontSize(24);
+      doc.setTextColor(...orange);
+      const introTitle = title.toUpperCase();
+      doc.text(introTitle, margin, 22);
+      let y = 34;
+      // Materials section
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...orange);
+      doc.text("MATERIAAL", margin, y);
+      y += 6;
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      if (pdfMaterialText.trim()) {
+        const matLines = doc.splitTextToSize(pdfMaterialText, contentW);
+        doc.text(matLines, margin, y);
+        y += matLines.length * 4 + 4;
+      } else {
+        doc.text(`Kleur A: ${colA.name}`, margin + 4, y); y += 4;
+        doc.text(`Kleur B: ${colB.name}`, margin + 4, y); y += 4;
+        doc.text(`Haaknaald: 4 mm`, margin + 4, y); y += 8;
+      }
+      // Intro text
+      if (pdfIntroText.trim()) {
+        doc.setFontSize(9);
+        doc.setTextColor(...darkText);
+        const introLines = doc.splitTextToSize(pdfIntroText, contentW);
+        doc.text(introLines, margin, y);
+        y += introLines.length * 4 + 6;
+      }
+      // Symbol legend
+      doc.setFontSize(11);
+      doc.setTextColor(...orange);
+      doc.text("UITLEG TELPATROON", margin, y);
+      y += 7;
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      // Draw legend boxes
+      const legendItems = [
+        { label: `${t.termSc} met ${colA.name}`, hex: colA.hex, filled: false },
+        { label: `${t.termSc} met ${colB.name}`, hex: colB.hex, filled: true },
+        { label: `${t.termDc} met ${colA.name}`, hex: colA.hex, filled: false, symbol: "T" },
+        { label: `${t.termDc} met ${colB.name}`, hex: colB.hex, filled: true, symbol: "T" },
+      ];
+      for (const item of legendItems) {
+        // Small colored box
+        const [r, g, b] = item.filled
+          ? [parseInt(item.hex.slice(1, 3), 16), parseInt(item.hex.slice(3, 5), 16), parseInt(item.hex.slice(5, 7), 16)]
+          : [255, 255, 255];
+        doc.setFillColor(r, g, b);
+        doc.setDrawColor(100, 100, 100);
+        doc.rect(margin + 2, y - 3, 5, 5, "FD");
+        if (item.symbol) {
+          doc.setFontSize(7);
+          doc.setTextColor(item.filled ? 255 : 0, item.filled ? 255 : 0, item.filled ? 255 : 0);
+          doc.text("T", margin + 4.5, y + 0.5, { align: "center" });
+        }
+        doc.setFontSize(9);
+        doc.setTextColor(...darkText);
+        doc.text(item.label, margin + 10, y);
+        y += 7;
+      }
+      y += 4;
+      // Abbreviations
+      doc.setFontSize(11);
+      doc.setTextColor(...orange);
+      doc.text("UITLEG AFKORTING GESCHREVEN TEKST", margin, y);
+      y += 7;
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      const abbrevs = [
+        `${t.termSc} — ${t.scInfo}`,
+        `${t.termDc} — ${t.dcInfo}`,
+        `KS — ${t.edgeInfo}`,
+      ];
+      for (const abbr of abbrevs) {
+        const abbrLines = doc.splitTextToSize(abbr, contentW - 4);
+        doc.text(abbrLines, margin + 4, y);
+        y += abbrLines.length * 4 + 2;
+      }
+      y += 4;
+      // Start pattern instruction
+      doc.setFontSize(11);
+      doc.setTextColor(...orange);
+      doc.text("START PATROON", margin, y);
+      y += 7;
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      const startInstr = templateText(t.startLine1Template, { name: colA.name, chainCount: chart[0].length + 3 })
+        + " " + templateText(t.startLine2Template, { stitchCount: chart[0].length + 2 });
+      const startLines = doc.splitTextToSize(startInstr, contentW);
+      doc.text(startLines, margin, y);
+      addFooter(pageNum);
+
+      // ---- PAGES 3+: Written Pattern ----
+      const wpFontSize = 7;
+      const wpLineHeight = 3.6;
+      const wpHeaderHeight = 32;
+      const wpFooterHeight = 16;
+      const wpAvailHeight = ph - wpHeaderHeight - wpFooterHeight;
+      const wpRowsPerPage = Math.floor(wpAvailHeight / wpLineHeight);
+
+      for (let startIdx = 0; startIdx < patternRows.length; startIdx += wpRowsPerPage) {
+        doc.addPage();
+        addPageBg();
+        pageNum++;
+        addHeader("GESCHREVEN", "TEKST");
+        // Green accent line under header
+        doc.setFillColor(100, 140, 80);
+        doc.rect(margin, 26, contentW, 0.5, "F");
+
+        const endIdx = Math.min(startIdx + wpRowsPerPage, patternRows.length);
+        let ry = wpHeaderHeight;
+
+        for (let i = startIdx; i < endIdx; i++) {
+          const rowNum = i + 1;
+          const colorIdx = getRowColor(rowNum - 1);
+          // Alternating row backgrounds
+          if (i % 2 === 1) {
+            doc.setFillColor(235, 235, 230);
+            doc.rect(margin, ry - 2.5, contentW, wpLineHeight, "F");
+          }
+          // Color indicator bar on left
+          const [cr, cg, cb] = colorIdx === 0
+            ? [parseInt(colA.hex.slice(1, 3), 16), parseInt(colA.hex.slice(3, 5), 16), parseInt(colA.hex.slice(5, 7), 16)]
+            : [parseInt(colB.hex.slice(1, 3), 16), parseInt(colB.hex.slice(3, 5), 16), parseInt(colB.hex.slice(5, 7), 16)];
+          doc.setFillColor(cr, cg, cb);
+          doc.rect(margin, ry - 2.5, 1.2, wpLineHeight, "F");
+
+          doc.setFont("CamptonMedium", "normal");
+          doc.setFontSize(wpFontSize);
+          doc.setTextColor(...darkText);
+          // Truncate long rows to fit
+          const maxChars = 160;
+          const rowText = patternRows[i].length > maxChars ? patternRows[i].substring(0, maxChars) + "..." : patternRows[i];
+          doc.text(rowText, margin + 3, ry);
+          ry += wpLineHeight;
+        }
+        addFooter(pageNum);
+      }
+
+      // ---- CHART TOTAL PAGE ----
+      doc.addPage();
+      addPageBg();
+      pageNum++;
+      addHeader("TELPATROON", "TOTAAL");
+      // Generate chart image using buildPrintPageImage
+      const totalLayout = computePrintLayout({
+        chartWidth: chart[0].length,
+        chartHeight: chart.length,
+        showEdges: projConfig.showEdges,
+        paper: "A4",
+        orientation: "portrait",
+        marginMm: 20,
+        mode: "single",
+        cellMm: 3,
+      });
+      const totalImg = buildPrintPageImage({
+        chart, colA, colB, config: projConfig,
+        layout: totalLayout, pageX: 0, pageY: 0, dpi: 200,
+      });
+      // Add chart image - fit within page
+      const chartImgW = contentW;
+      const chartImgH = ph - 40 - 16; // header + footer space
+      doc.addImage(totalImg.dataUrl, "PNG", margin, 32, chartImgW, chartImgH, undefined, "FAST");
+      addFooter(pageNum);
+
+      // ---- CHART SECTION PAGES ----
+      if (chartSections.length > 1) {
+        for (let si = 0; si < chartSections.length; si++) {
+          const sec = chartSections[si];
+          doc.addPage();
+          addPageBg();
+          pageNum++;
+          const secName = (chartTitle || "PATROON").toUpperCase();
+          addHeader(secName, "TELPATROON");
+          // Section info
+          doc.setFont("CamptonMedium", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...darkText);
+          doc.text(`${sec.label} — rij ${chart.length - sec.endRow + 1} t/m ${chart.length - sec.startRow}`, margin, 30);
+          // Generate section chart image
+          const secLayout = computePrintLayout({
+            chartWidth: sec.chartSlice[0].length,
+            chartHeight: sec.chartSlice.length,
+            showEdges: projConfig.showEdges,
+            paper: "A4",
+            orientation: "portrait",
+            marginMm: 20,
+            mode: "single",
+            cellMm: 3,
+          });
+          const secImg = buildPrintPageImage({
+            chart: sec.chartSlice, colA, colB, config: projConfig,
+            layout: secLayout, pageX: 0, pageY: 0, dpi: 200,
+          });
+          const secImgH = ph - 44 - 16;
+          doc.addImage(secImg.dataUrl, "PNG", margin, 36, contentW, secImgH, undefined, "FAST");
+          addFooter(pageNum);
+        }
+      }
+
+      // ---- FINISHING PAGE (Enveloprand) ----
+      doc.addPage();
+      addPageBg();
+      pageNum++;
+      addHeader("ENVELOP", "RAND");
+      let fy = 34;
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      if (pdfFinishText.trim()) {
+        const finLines = doc.splitTextToSize(pdfFinishText, contentW);
+        doc.text(finLines, margin, fy);
+      } else {
+        const defaultFinish = "Wanneer de deken helemaal is gehaakt, blijven er aan de zijkanten losse draadjes over. " +
+          "Je kunt deze afknippen, maar dat is veel werk en het kan lastig zijn om een mooie, rechte rand te maken. " +
+          "Een veiligere en mooiere alternatieve methode is de enveloprand.";
+        const finLines = doc.splitTextToSize(defaultFinish, contentW);
+        doc.text(finLines, margin, fy);
+      }
+      addFooter(pageNum);
+
+      // ---- BACK PAGE ----
+      doc.addPage();
+      addPageBg();
+      pageNum++;
+      // Logo centered
+      doc.setFont("SketchSolid", "normal");
+      doc.setFontSize(32);
+      doc.setTextColor(...orange);
+      doc.text("YarnZoo", pw / 2, ph / 2, { align: "center" });
+      // Contact info
+      doc.setFont("CamptonMedium", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...darkText);
+      doc.text("info@yarnzoocrochet.com", pw / 2, ph / 2 + 12, { align: "center" });
+      doc.text("www.yarnzoocrochet.com", pw / 2, ph / 2 + 17, { align: "center" });
+      // Copyright
+      doc.setFontSize(7);
+      doc.text(`Alle rechten voorbehouden. Dit patroon is alleen voor persoonlijk gebruik.`, pw / 2, ph - 20, { align: "center" });
+      doc.text(`© ${new Date().getFullYear()} YarnZoo`, pw / 2, ph - 15, { align: "center" });
+
+      // Save
+      const fileName = `${title.replace(/[^a-zA-Z0-9\s]/g, "").replace(/\s+/g, "_")}_patroon.pdf`;
+      doc.save(fileName);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      alert("Er ging iets mis bij het genereren van de PDF: " + err.message);
+    } finally {
+      setPdfGenerating(false);
+    }
+  };
+
   const printChart = () => {
     if (!chart || !printLayout) {
       alert("Er is geen chart om te printen.");
@@ -3267,8 +3633,35 @@ export default function App() {
                 </Panel>
                 <Panel title="Export">
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <button onClick={printChart} style={btnSm}>Print / PDF</button>
+                    <button onClick={printChart} style={btnSm}>Print / PDF (chart)</button>
                     <button onClick={exportText} style={{ ...btnPri, fontSize: "13px", padding: "10px 16px" }}>Download .txt</button>
+                  </div>
+                </Panel>
+                <Panel title="PDF Patroon">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+                    <div>
+                      <span style={lbl}>Subtitel:</span>
+                      <input type="text" value={pdfSubtitle} onChange={e => setPdfSubtitle(e.target.value)} placeholder="Overlay Mozaïek Deken" style={{ ...inp, width: "100%", marginTop: "2px" }} />
+                    </div>
+                    <div>
+                      <span style={lbl}>Materiaal:</span>
+                      <textarea value={pdfMaterialText} onChange={e => setPdfMaterialText(e.target.value)} placeholder="Scheepjes Colour Crafter..." rows={3} style={{ ...inp, width: "100%", marginTop: "2px", resize: "vertical", fontFamily: F.body, fontSize: "11px" }} />
+                    </div>
+                    <div>
+                      <span style={lbl}>Intro tekst:</span>
+                      <textarea value={pdfIntroText} onChange={e => setPdfIntroText(e.target.value)} placeholder="Verhaaltekst over het patroon..." rows={3} style={{ ...inp, width: "100%", marginTop: "2px", resize: "vertical", fontFamily: F.body, fontSize: "11px" }} />
+                    </div>
+                    <div>
+                      <span style={lbl}>Afwerking:</span>
+                      <textarea value={pdfFinishText} onChange={e => setPdfFinishText(e.target.value)} placeholder="Enveloprand instructies..." rows={3} style={{ ...inp, width: "100%", marginTop: "2px", resize: "vertical", fontFamily: F.body, fontSize: "11px" }} />
+                    </div>
+                    <button
+                      onClick={generatePatternPDF}
+                      disabled={pdfGenerating}
+                      style={{ ...btnPri, fontSize: "14px", padding: "12px 16px", opacity: pdfGenerating ? 0.6 : 1 }}
+                    >
+                      {pdfGenerating ? "Bezig met genereren..." : "Genereer PDF"}
+                    </button>
                   </div>
                 </Panel>
               </aside>
@@ -3287,6 +3680,7 @@ export default function App() {
                     </select>
                     <button onClick={printChart} style={btnSm}>Print</button>
                     <button onClick={exportText} style={btnPri}>Download .txt</button>
+                    <button onClick={generatePatternPDF} disabled={pdfGenerating} style={{ ...btnPri, opacity: pdfGenerating ? 0.6 : 1 }}>{pdfGenerating ? "Bezig..." : "PDF"}</button>
                   </div>
                 </Panel>
               </div>

@@ -1989,13 +1989,6 @@ export default function App() {
 
   const patternText = patternTexts[patternLanguage] || patternTexts.nl || normalizePatternTexts(null).nl;
   const patternRows = chart ? generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText) : [];
-  const sectionedPatternRows = useMemo(() => {
-    if (!chart || chartSections.length <= 1) return null;
-    return chartSections.map(s => ({
-      ...s,
-      rows: generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText, s.startRow, s.endRow),
-    }));
-  }, [chart, chartSections, colA, colB, projConfig.direction, patternText]);
   const printLayout = chart
     ? computePrintLayout({
       chartWidth: chart[0].length,
@@ -2074,6 +2067,14 @@ export default function App() {
       rowOffset: s.startRow,
     }));
   }, [chart, splitMode, splitCount, splitRowSize, splitPoints]);
+
+  const sectionedPatternRows = useMemo(() => {
+    if (!chart || chartSections.length <= 1) return null;
+    return chartSections.map(s => ({
+      ...s,
+      rows: generateWrittenPattern(chart, colA, colB, projConfig.direction, patternText, s.startRow, s.endRow),
+    }));
+  }, [chart, chartSections, colA, colB, projConfig.direction, patternText]);
 
   const goToStep = (nextStep) => {
     if (!canGoToStep[nextStep]) return;

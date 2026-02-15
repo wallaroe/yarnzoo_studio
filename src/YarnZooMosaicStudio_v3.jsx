@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
 
 // ============================================================
@@ -1527,6 +1527,14 @@ export default function App() {
     if (!isMobile) setSidebarOpen(false);
   }, [isMobile]);
 
+  // Close "bestand" dropdown on click outside
+  useEffect(() => {
+    if (openMenu !== "bestand") return;
+    const handler = () => setOpenMenu("");
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [openMenu]);
+
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) {
       setAuthReady(true);
@@ -2001,6 +2009,30 @@ export default function App() {
     pattern: !!chart,
   };
 
+  // Stitch statistics for right sidebar
+  const stitchStats = useMemo(() => {
+    if (!chart || !chart.length) return null;
+    const h = chart.length, w = chart[0].length;
+    const totalCells = h * w;
+    let dcCount = 0;
+    let colorACells = 0, colorBCells = 0;
+    for (let y = 0; y < h; y++) {
+      const rowNum = h - y;
+      const isColorA = getRowColor(rowNum - 1) === 0;
+      for (let x = 0; x < w; x++) {
+        if (chart[y][x]) dcCount++;
+        if (isColorA) colorACells++; else colorBCells++;
+      }
+    }
+    const scCount = totalCells - dcCount;
+    return {
+      totalCells, dcCount, scCount,
+      colorACells, colorBCells,
+      colorAPercent: ((colorACells / totalCells) * 100).toFixed(0),
+      colorBPercent: ((colorBCells / totalCells) * 100).toFixed(0),
+    };
+  }, [chart]);
+
   const goToStep = (nextStep) => {
     if (!canGoToStep[nextStep]) return;
     setOpenMenu("");
@@ -2246,21 +2278,72 @@ export default function App() {
     <div style={{ minHeight: "100vh", background: B.white, fontFamily: F.body, color: B.dark }}>
       <style>{BRAND_FONT_FACE_CSS}</style>
       <header style={{ background: B.white, position: "sticky", top: 0, zIndex: 100, borderBottom: `1px solid ${B.border}` }}>
-        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: "16px" }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
             <div style={{ width: "32px", height: "32px", borderRadius: "6px", background: B.orange, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: B.white, fontWeight: 700 }}>YZ</div>
             <div>
-              <span style={{ color: B.orange, fontWeight: 700, fontSize: "22px", fontFamily: F.heading, lineHeight: 1 }}>YarnZoo</span>
-              <span style={{ color: "#7A7780", fontSize: "9px", letterSpacing: "1.4px", textTransform: "uppercase", marginLeft: "8px" }}>Mosaic Studio</span>
+              <span style={{ color: B.orange, fontWeight: 700, fontSize: "20px", fontFamily: F.heading, lineHeight: 1 }}>YarnZoo</span>
+              <span style={{ color: "#7A7780", fontSize: "9px", letterSpacing: "1.2px", textTransform: "uppercase", marginLeft: "6px" }}>Mosaic Studio</span>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-            <span style={{ color: B.dark, fontSize: "11px", maxWidth: isMobile ? "130px" : "220px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", border: `1px solid ${B.border}`, borderRadius: "6px", padding: "5px 8px", background: "#FCFCFC" }}>
-              {chartTitle}
-            </span>
-            {isMobile && (
-              <button style={btnHead} onClick={() => setSidebarOpen(true)}>Menu</button>
+
+          {/* Workflow stepper (desktop) */}
+          {!isMobile && (
+            <nav style={{ display: "flex", alignItems: "center", gap: "4px", flex: 1, justifyContent: "center" }}>
+              {sidebarStepItems.map((item, i) => (
+                <React.Fragment key={item.id}>
+                  {i > 0 && <span style={{ color: B.beige, fontSize: "14px", margin: "0 2px" }}>—</span>}
+                  <button
+                    onClick={() => goToStep(item.id)}
+                    disabled={!item.enabled}
+                    style={{
+                      background: step === item.id ? B.cream : "transparent",
+                      border: `1.5px solid ${step === item.id ? B.orange : "transparent"}`,
+                      borderRadius: "20px", padding: "6px 14px", fontSize: "12px", fontWeight: 600,
+                      cursor: item.enabled ? "pointer" : "not-allowed",
+                      color: step === item.id ? B.orange : item.enabled ? B.dark : "#aaa",
+                      opacity: item.enabled ? 1 : 0.5, whiteSpace: "nowrap", fontFamily: F.body,
+                    }}
+                  >{item.label}</button>
+                </React.Fragment>
+              ))}
+            </nav>
+          )}
+
+          {/* Right actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            {chart && !isMobile && (
+              <>
+                <button onClick={undo} disabled={!canUndo} style={{ ...btnHead, opacity: canUndo ? 1 : 0.35 }} title="Ongedaan maken (Cmd+Z)">↩</button>
+                <button onClick={redo} disabled={!canRedo} style={{ ...btnHead, opacity: canRedo ? 1 : 0.35 }} title="Opnieuw (Cmd+Shift+Z)">↪</button>
+              </>
             )}
+            {!isMobile && (
+              <div style={{ position: "relative" }}>
+                <button onClick={(e) => { e.stopPropagation(); toggleMenuPanel("bestand"); }} style={btnHead}>Bestand ▾</button>
+                {openMenu === "bestand" && (
+                  <div style={dropdownWrap} onClick={e => e.stopPropagation()}>
+                    <button style={dropdownItem} onClick={() => { newChart(); setOpenMenu(""); }}>Nieuw chart</button>
+                    <button style={dropdownItem} onClick={() => { saveCurrentChart(); setOpenMenu(""); }}>Opslaan</button>
+                    <button style={dropdownItem} onClick={() => toggleMenuPanel("settings")}>Chart instellingen</button>
+                    <button style={dropdownItem} onClick={() => toggleMenuPanel("library")}>Bibliotheek</button>
+                    <button style={dropdownItem} onClick={() => toggleMenuPanel("folders")}>Mappen beheren</button>
+                    <div style={{ borderTop: `1px solid ${B.border}`, margin: "4px 0" }} />
+                    <button style={dropdownItem} onClick={() => toggleMenuPanel("palette")}>Garenpalet</button>
+                    <button style={dropdownItem} onClick={() => toggleMenuPanel("translations")}>Vertaaltabel</button>
+                    {hasSupabaseConfig && (
+                      <>
+                        <div style={{ borderTop: `1px solid ${B.border}`, margin: "4px 0" }} />
+                        <button style={dropdownItem} onClick={() => { if (user) { signOutUser(); } else { toggleMenuPanel("auth"); } setOpenMenu(""); }}>{user ? "Uitloggen" : "Inloggen"}</button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {chart && !isMobile && <button onClick={exportText} style={{ ...btnPri, padding: "8px 16px", fontSize: "12px" }}>Export</button>}
+            {isMobile && <button style={btnHead} onClick={() => setSidebarOpen(true)}>Menu</button>}
           </div>
         </div>
       </header>
@@ -2286,13 +2369,7 @@ export default function App() {
       )}
 
       <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "280px minmax(0, 1fr)", gap: "16px", alignItems: "start" }}>
-          {!isMobile && (
-            <aside style={sidebarWrap}>
-              {sidebarContent}
-            </aside>
-          )}
-          <section style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0 }}>
 
         {openMenu === "settings" && (
           <div style={{ background: B.white, border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "12px", marginBottom: "14px" }}>
@@ -2589,39 +2666,86 @@ export default function App() {
         )}
 
         {step === "adjust" && (
-          <div>
-            <h2 style={{ fontSize: "28px", color: B.orange, marginBottom: "16px", fontFamily: F.heading, fontWeight: 700 }}>Pas de conversie aan</h2>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "24px" }}>
-              <div>
-                <div style={panelLabel}>Originele afbeelding</div>
-                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
-                  <img src={origImage} alt="Original" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "6px" }} />
-                </div>
-              </div>
-              <div>
-                <div style={panelLabel}>Telpatroon preview ({projConfig.showEdges ? gridW + 2 : gridW} × {gridH})</div>
-                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
-                  <canvas ref={previewRef} style={{ maxWidth: "100%", imageRendering: "pixelated", borderRadius: "6px" }} />
-                </div>
-              </div>
-            </div>
+          <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "280px minmax(0,1fr)", gap: "20px", alignItems: "start" }}>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "20px" }}>
-              <Panel title="Raster afmetingen">
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <span style={lbl}>Breed:</span>
-                  <input type="number" min={20} max={300} value={gridW} onChange={e => {
-                    setSyncCalculatorToGrid(false);
-                    const v = parseInt(e.target.value) || 20; setGridW(v);
-                    if (imgEl) setGridH(Math.round(v * (imgEl.height / imgEl.width)));
-                  }} style={inp} />
-                  <span style={lbl}>Hoog:</span>
-                  <input type="number" min={20} max={400} value={gridH} onChange={e => { setSyncCalculatorToGrid(false); setGridH(parseInt(e.target.value) || 20); }} style={inp} />
+            {/* LEFT SIDEBAR — controls (desktop) */}
+            {!isMobile && (
+              <aside style={{ position: "sticky", top: "64px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <Panel title="Raster afmetingen">
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <span style={lbl}>Breed:</span>
+                    <input type="number" min={20} max={300} value={gridW} onChange={e => {
+                      setSyncCalculatorToGrid(false);
+                      const v = parseInt(e.target.value) || 20; setGridW(v);
+                      if (imgEl) setGridH(Math.round(v * (imgEl.height / imgEl.width)));
+                    }} style={inp} />
+                    <span style={lbl}>Hoog:</span>
+                    <input type="number" min={20} max={400} value={gridH} onChange={e => { setSyncCalculatorToGrid(false); setGridH(parseInt(e.target.value) || 20); }} style={inp} />
+                  </div>
+                </Panel>
+
+                <Panel title="Drempel (licht / donker)">
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px" }}>Meer stokjes</span>
+                    <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
+                    <span style={{ fontSize: "11px" }}>Minder stokjes</span>
+                    <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                  </div>
+                </Panel>
+
+                <Panel title="Kleuren">
+                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <ColorPick
+                      label="Kleur A (oneven rijen)"
+                      color={colA}
+                      set={setColA}
+                      palette={yarnPalette}
+                      onPickFromPalette={(entry) => applyPaletteColor(entry, setColA, DEFAULT_COLOR_A)}
+                      onSaveToPalette={() => saveColorToPalette(colA)}
+                    />
+                    <ColorPick
+                      label="Kleur B (even rijen)"
+                      color={colB}
+                      set={setColB}
+                      palette={yarnPalette}
+                      onPickFromPalette={(entry) => applyPaletteColor(entry, setColB, DEFAULT_COLOR_B)}
+                      onSaveToPalette={() => saveColorToPalette(colB)}
+                    />
+                    <button onClick={() => { const tmp = colA; setColA(colB); setColB(tmp); }} style={{ ...btnSm, marginBottom: "2px" }}>⇄</button>
+                  </div>
+                  <div style={{ marginTop: "6px", fontSize: "11px", color: "#777" }}>
+                    Basispalet staat vast. Nieuwe kleuren voeg je toe met <strong>In palet</strong>. Beheer via Instellingen → Garenpalet.
+                  </div>
+                </Panel>
+
+                <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                  <button onClick={() => setStep("upload")} style={{ ...btnSec, flex: 1 }}>← Terug</button>
+                  <button onClick={confirmGrid} style={{ ...btnPri, flex: 1 }}>Bevestig →</button>
                 </div>
-              </Panel>
+              </aside>
+            )}
+
+            {/* CENTER — previews + calculator */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <h2 style={{ fontSize: "28px", color: B.orange, marginBottom: "0", fontFamily: F.heading, fontWeight: 700 }}>Pas de conversie aan</h2>
+
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "16px" }}>
+                <div>
+                  <div style={panelLabel}>Originele afbeelding</div>
+                  <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
+                    <img src={origImage} alt="Original" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "6px" }} />
+                  </div>
+                </div>
+                <div>
+                  <div style={panelLabel}>Telpatroon preview ({projConfig.showEdges ? gridW + 2 : gridW} × {gridH})</div>
+                  <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
+                    <canvas ref={previewRef} style={{ maxWidth: "100%", imageRendering: "pixelated", borderRadius: "6px" }} />
+                  </div>
+                </div>
+              </div>
 
               <Panel title="Chart Size Calculator">
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "330px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                   <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                     <span style={lbl}>Eenheid:</span>
                     <select value={calcUnit} onChange={e => setCalcUnit(e.target.value)} style={{ ...inp, width: "80px" }}>
@@ -2638,33 +2762,39 @@ export default function App() {
                     </label>
                   </div>
 
-                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px" }}>
-                    Sample swatch
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={lbl}>Maat:</span>
-                    <input type="number" min="0" step="0.1" value={swatchWidth} onChange={e => { setSyncCalculatorToGrid(true); setSwatchWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="0.1" value={swatchHeight} onChange={e => { setSyncCalculatorToGrid(true); setSwatchHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={lbl}>Steken:</span>
-                    <input type="number" min="0" step="1" value={swatchStitches} onChange={e => { setSyncCalculatorToGrid(true); setSwatchStitches(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="1" value={swatchRows} onChange={e => { setSyncCalculatorToGrid(true); setSwatchRows(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>rijen</span>
-                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px" }}>
+                    <div>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>
+                        Sample swatch
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginBottom: "4px" }}>
+                        <span style={lbl}>Maat:</span>
+                        <input type="number" min="0" step="0.1" value={swatchWidth} onChange={e => { setSyncCalculatorToGrid(true); setSwatchWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>×</span>
+                        <input type="number" min="0" step="0.1" value={swatchHeight} onChange={e => { setSyncCalculatorToGrid(true); setSwatchHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={lbl}>Steken:</span>
+                        <input type="number" min="0" step="1" value={swatchStitches} onChange={e => { setSyncCalculatorToGrid(true); setSwatchStitches(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>×</span>
+                        <input type="number" min="0" step="1" value={swatchRows} onChange={e => { setSyncCalculatorToGrid(true); setSwatchRows(Math.max(0, parseInt(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>rijen</span>
+                      </div>
+                    </div>
 
-                  <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px" }}>
-                    Gewenste eindmaat
-                  </div>
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={lbl}>Maat:</span>
-                    <input type="number" min="0" step="0.1" value={desiredWidth} onChange={e => { setSyncCalculatorToGrid(true); setDesiredWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>×</span>
-                    <input type="number" min="0" step="0.1" value={desiredHeight} onChange={e => { setSyncCalculatorToGrid(true); setDesiredHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
-                    <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
+                    <div>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: B.orange, textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>
+                        Gewenste eindmaat
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={lbl}>Maat:</span>
+                        <input type="number" min="0" step="0.1" value={desiredWidth} onChange={e => { setSyncCalculatorToGrid(true); setDesiredWidth(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>×</span>
+                        <input type="number" min="0" step="0.1" value={desiredHeight} onChange={e => { setSyncCalculatorToGrid(true); setDesiredHeight(Math.max(0, parseFloat(e.target.value) || 0)); }} style={inp} />
+                        <span style={{ fontSize: "11px", color: "#777" }}>{calcUnit}</span>
+                      </div>
+                    </div>
                   </div>
 
                   {calculatorResult ? (
@@ -2699,235 +2829,319 @@ export default function App() {
                 </div>
               </Panel>
 
-              <Panel title="Drempel (licht / donker)">
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <span style={{ fontSize: "11px" }}>Meer stokjes</span>
-                  <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
-                  <span style={{ fontSize: "11px" }}>Minder stokjes</span>
-                  <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
-                </div>
-              </Panel>
+              {/* Mobile: controls inline below previews */}
+              {isMobile && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <Panel title="Raster afmetingen">
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={lbl}>Breed:</span>
+                      <input type="number" min={20} max={300} value={gridW} onChange={e => {
+                        setSyncCalculatorToGrid(false);
+                        const v = parseInt(e.target.value) || 20; setGridW(v);
+                        if (imgEl) setGridH(Math.round(v * (imgEl.height / imgEl.width)));
+                      }} style={inp} />
+                      <span style={lbl}>Hoog:</span>
+                      <input type="number" min={20} max={400} value={gridH} onChange={e => { setSyncCalculatorToGrid(false); setGridH(parseInt(e.target.value) || 20); }} style={inp} />
+                    </div>
+                  </Panel>
 
-              <Panel title="Kleuren">
-                <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
-                  <ColorPick
-                    label="Kleur A (oneven rijen)"
-                    color={colA}
-                    set={setColA}
-                    palette={yarnPalette}
-                    onPickFromPalette={(entry) => applyPaletteColor(entry, setColA, DEFAULT_COLOR_A)}
-                    onSaveToPalette={() => saveColorToPalette(colA)}
-                  />
-                  <ColorPick
-                    label="Kleur B (even rijen)"
-                    color={colB}
-                    set={setColB}
-                    palette={yarnPalette}
-                    onPickFromPalette={(entry) => applyPaletteColor(entry, setColB, DEFAULT_COLOR_B)}
-                    onSaveToPalette={() => saveColorToPalette(colB)}
-                  />
-                  <button onClick={() => { const tmp = colA; setColA(colB); setColB(tmp); }} style={{ ...btnSm, marginBottom: "2px" }}>⇄</button>
-                </div>
-                <div style={{ marginTop: "6px", fontSize: "11px", color: "#777" }}>
-                  Basispalet staat vast. Nieuwe kleuren voeg je toe met <strong>In palet</strong>. Beheer via Instellingen → Garenpalet.
-                </div>
-              </Panel>
-            </div>
+                  <Panel title="Drempel (licht / donker)">
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px" }}>Meer stokjes</span>
+                      <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
+                      <span style={{ fontSize: "11px" }}>Minder stokjes</span>
+                      <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                    </div>
+                  </Panel>
 
-            <div style={{ display: "flex", gap: "12px", marginTop: "24px", justifyContent: "center" }}>
-              <button onClick={() => setStep("upload")} style={btnSec}>← Terug</button>
-              <button onClick={confirmGrid} style={btnPri}>Bevestig en ga bewerken →</button>
+                  <Panel title="Kleuren">
+                    <div style={{ display: "flex", gap: "12px", alignItems: "flex-end", flexWrap: "wrap" }}>
+                      <ColorPick
+                        label="Kleur A (oneven rijen)"
+                        color={colA}
+                        set={setColA}
+                        palette={yarnPalette}
+                        onPickFromPalette={(entry) => applyPaletteColor(entry, setColA, DEFAULT_COLOR_A)}
+                        onSaveToPalette={() => saveColorToPalette(colA)}
+                      />
+                      <ColorPick
+                        label="Kleur B (even rijen)"
+                        color={colB}
+                        set={setColB}
+                        palette={yarnPalette}
+                        onPickFromPalette={(entry) => applyPaletteColor(entry, setColB, DEFAULT_COLOR_B)}
+                        onSaveToPalette={() => saveColorToPalette(colB)}
+                      />
+                      <button onClick={() => { const tmp = colA; setColA(colB); setColB(tmp); }} style={{ ...btnSm, marginBottom: "2px" }}>⇄</button>
+                    </div>
+                    <div style={{ marginTop: "6px", fontSize: "11px", color: "#777" }}>
+                      Basispalet staat vast. Nieuwe kleuren voeg je toe met <strong>In palet</strong>. Beheer via Instellingen → Garenpalet.
+                    </div>
+                  </Panel>
+
+                  <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                    <button onClick={() => setStep("upload")} style={btnSec}>← Terug</button>
+                    <button onClick={confirmGrid} style={btnPri}>Bevestig en ga bewerken →</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {step === "edit" && chart && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-              <h2 style={{ fontSize: "28px", color: B.orange, margin: 0, fontFamily: F.heading, fontWeight: 700 }}>Bewerk je telpatroon</h2>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={() => setStep("adjust")} style={btnSec}>← Conversie</button>
-                <button onClick={() => setStep("pattern")} style={btnPri}>Bekijk patroon →</button>
-              </div>
-            </div>
+          <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "220px minmax(0,1fr) 260px", gap: "16px", alignItems: "start" }}>
 
-            {fixCount > 0 && (
-              <div style={{ background: B.cream, border: `1px solid ${B.orange}`, borderRadius: "6px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px" }}>
-                Let op: <strong>{fixCount}</strong> stokjes zijn automatisch verwijderd (stokje-op-stokje regel). Controleer het resultaat.
-              </div>
-            )}
-            {ruleNotice && (
-              <div style={{ background: "#FFF8E1", border: "1px solid #F0D9A5", borderRadius: "6px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px", color: "#6F5A2C" }}>
-                {ruleNotice}
-              </div>
+            {/* LEFT SIDEBAR (desktop) */}
+            {!isMobile && (
+              <aside style={{ position: "sticky", top: "64px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <Panel title="Gereedschap">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {[
+                      { id: "symbol", label: "Stokje", desc: "Plaats een stokje" },
+                      { id: "erase", label: "Wissen", desc: "Verwijder een stokje" },
+                      { id: "toggle", label: "Wissel", desc: "Wissel stokje/leeg" },
+                    ].map(t => (
+                      <button key={t.id} onClick={() => setTool(t.id)} style={{
+                        padding: "10px 12px", borderRadius: "8px", border: `2px solid ${tool === t.id ? B.orange : B.border}`,
+                        background: tool === t.id ? B.cream : B.white, cursor: "pointer", textAlign: "left",
+                      }}>
+                        <div style={{ fontWeight: 700, fontSize: "13px", color: tool === t.id ? B.orange : B.dark }}>{t.label}</div>
+                        <div style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>{t.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </Panel>
+                <Panel title="Garen kleuren">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ width: "24px", height: "24px", borderRadius: "4px", background: colA.hex, border: "1px solid #ccc", flexShrink: 0 }} />
+                      <div><div style={{ fontSize: "12px", fontWeight: 600 }}>Kleur A</div><div style={{ fontSize: "11px", color: "#888" }}>{colA.name}</div></div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ width: "24px", height: "24px", borderRadius: "4px", background: colB.hex, border: "1px solid #ccc", flexShrink: 0 }} />
+                      <div><div style={{ fontSize: "12px", fontWeight: 600 }}>Kleur B</div><div style={{ fontSize: "11px", color: "#888" }}>{colB.name}</div></div>
+                    </div>
+                  </div>
+                </Panel>
+                <Panel title="Transformaties">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐ Omkeren</button>
+                    <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true }); }} style={btnSm}>↔ Spiegel H</button>
+                    <button onClick={() => { pushHistory(chart); applyValidatedChart([...chart].reverse(), { notify: true }); }} style={btnSm}>↕ Spiegel V</button>
+                    <button onClick={() => applyValidatedChart(chart, { notify: true, successMessage: "Controle OK: overlay-regels kloppen." })} style={btnSm}>✓ Check</button>
+                  </div>
+                </Panel>
+                <Panel title="Zoom">
+                  <input type="range" min={2} max={18} value={cellSize} onChange={e => setCellSize(parseInt(e.target.value))} style={{ width: "100%" }} />
+                </Panel>
+              </aside>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
-              <Panel title="Project Instellingen">
-                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
-                    <input type="checkbox" checked={projConfig.showEdges} onChange={e => setProjConfig({ ...projConfig, showEdges: e.target.checked })} />
-                    Toon Kantsteken
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
-                    <select value={projConfig.direction} onChange={e => setProjConfig({ ...projConfig, direction: e.target.value })} style={{ ...inp, width: "auto" }}>
-                      <option value="RtoL">Start Rechts (←)</option>
-                      <option value="LtoR">Start Links (→)</option>
-                    </select>
-                  </label>
+            {/* CENTER: Canvas */}
+            <div>
+              {fixCount > 0 && (
+                <div style={{ background: B.cream, border: `1px solid ${B.orange}`, borderRadius: "6px", padding: "10px 16px", marginBottom: "12px", fontSize: "13px" }}>
+                  Let op: <strong>{fixCount}</strong> stokjes zijn automatisch verwijderd (stokje-op-stokje regel).
                 </div>
-              </Panel>
+              )}
+              {ruleNotice && (
+                <div style={{ background: "#FFF8E1", border: "1px solid #F0D9A5", borderRadius: "6px", padding: "8px 14px", marginBottom: "10px", fontSize: "12px", color: "#6F5A2C" }}>
+                  {ruleNotice}
+                </div>
+              )}
 
-              <Panel title="Gereedschap">
-                <div style={{ display: "flex", gap: "4px" }}>
+              {/* Mobile: inline tools */}
+              {isMobile && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
                   {[
-                    { id: "symbol", icon: "S", l: "Stokje" },
-                    { id: "erase", icon: "W", l: "Wissen" },
-                    { id: "toggle", icon: "T", l: "Wissel" },
+                    { id: "symbol", l: "S Stokje" },
+                    { id: "erase", l: "W Wissen" },
+                    { id: "toggle", l: "T Wissel" },
                   ].map(t => (
                     <button key={t.id} onClick={() => setTool(t.id)} style={{
                       ...btnTool, background: tool === t.id ? B.orange : B.white,
                       color: tool === t.id ? B.white : B.dark,
                       borderColor: tool === t.id ? B.orange : B.beige,
-                    }}>{t.icon} {t.l}</button>
+                    }}>{t.l}</button>
                   ))}
-                </div>
-              </Panel>
-              <Panel title="Acties">
-                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐ Omkeren</button>
-                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true }); }} style={btnSm}>↔ Spiegel H</button>
-                  <button onClick={() => { pushHistory(chart); applyValidatedChart([...chart].reverse(), { notify: true }); }} style={btnSm}>↕ Spiegel V</button>
-                  <button onClick={() => applyValidatedChart(chart, { notify: true, successMessage: "Controle OK: overlay-regels kloppen." })} style={btnSm}>✓ Check</button>
-                </div>
-              </Panel>
-              <Panel title="Zoom">
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐</button>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true }); }} style={btnSm}>↔</button>
+                  <button onClick={() => { pushHistory(chart); applyValidatedChart([...chart].reverse(), { notify: true }); }} style={btnSm}>↕</button>
+                  <button onClick={undo} disabled={!canUndo} style={{ ...btnSm, opacity: canUndo ? 1 : 0.35 }}>↩</button>
+                  <button onClick={redo} disabled={!canRedo} style={{ ...btnSm, opacity: canRedo ? 1 : 0.35 }}>↪</button>
                   <input type="range" min={2} max={18} value={cellSize} onChange={e => setCellSize(parseInt(e.target.value))} style={{ width: "80px" }} />
                 </div>
-              </Panel>
-              <Panel title="Raster grootte">
-                <div style={{ fontSize: "11px", color: "#666", lineHeight: 1.5 }}>
-                  <strong>{projConfig.showEdges ? gridW + 2 : gridW}</strong> kolommen × <strong>{gridH}</strong> rijen<br />
-                  <strong>{((projConfig.showEdges ? gridW + 2 : gridW) * gridH).toLocaleString("nl-NL")}</strong> totaal steken
-                  {projConfig.showEdges && <><br />({gridW} patroon + 2 kantsteken)</>}
-                </div>
-              </Panel>
+              )}
+
+              <div style={{ overflow: "auto", maxHeight: "80vh", background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}` }}>
+                <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} onRuleMessage={showRuleNotice} onDrawStart={() => pushHistory(chart)} />
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: "16px", marginBottom: "12px", fontSize: "11px", color: "#666", flexWrap: "wrap", alignItems: "center" }}>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colA.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Kleur A: {colA.name}</span>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colB.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Kleur B: {colB.name}</span>
-              <span><span style={{ display: "inline-block", width: "12px", height: "12px", border: "1px solid #aaa", verticalAlign: "middle", marginRight: "4px", textAlign: "center", color: "#333", fontSize: "8px", lineHeight: "12px", background: "#fff" }}>F</span> Symbool = stokje, zonder symbool = vaste</span>
-              {projConfig.showEdges && <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: "#eee", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", borderRadius: "50%", textAlign: "center", fontSize: "8px", lineHeight: "12px" }}>●</span> Kantsteek</span>}
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", marginBottom: "10px", alignItems: "center", background: B.cream, padding: "10px 14px", borderRadius: "8px", border: `1px solid ${B.beige}` }}>
-              <button onClick={undo} disabled={!canUndo} style={{ background: canUndo ? B.orange : B.beige, color: canUndo ? B.white : "#999", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "14px", fontWeight: 700, cursor: canUndo ? "pointer" : "default" }} title="Ongedaan maken (Cmd+Z)">↩ Ongedaan maken</button>
-              <button onClick={redo} disabled={!canRedo} style={{ background: canRedo ? B.orange : B.beige, color: canRedo ? B.white : "#999", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "14px", fontWeight: 700, cursor: canRedo ? "pointer" : "default" }} title="Opnieuw (Cmd+Shift+Z)">↪ Opnieuw</button>
-              <span style={{ fontSize: "11px", color: "#999", marginLeft: "auto" }}>Cmd+Z / Cmd+Shift+Z</span>
-              {ruleNotice && <span style={{ fontSize: "12px", color: B.orangeHover, fontWeight: 600 }}>{ruleNotice}</span>}
-            </div>
-
-            <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "6px", padding: "16px", border: `1px solid ${B.beige}` }}>
-              <ChartCanvas chart={chart} setChart={setChart} cellSize={cellSize} colA={colA} colB={colB} tool={tool} mode="edit" config={projConfig} onRuleMessage={showRuleNotice} onDrawStart={() => pushHistory(chart)} />
-            </div>
+            {/* RIGHT SIDEBAR (desktop) */}
+            {!isMobile && (
+              <aside style={{ position: "sticky", top: "64px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <Panel title="Preview">
+                  <div style={{ borderRadius: "6px", overflow: "hidden" }}>
+                    <VisualPreview chart={chart} colA={colA} colB={colB} />
+                  </div>
+                </Panel>
+                <Panel title="Project details">
+                  <div style={{ fontSize: "12px", color: "#555", lineHeight: 1.8 }}>
+                    <div>Afmetingen: <strong>{projConfig.showEdges ? gridW + 2 : gridW} × {gridH}</strong> st.</div>
+                    <div>Totaal steken: <strong>{((projConfig.showEdges ? gridW + 2 : gridW) * gridH).toLocaleString("nl-NL")}</strong></div>
+                    {projConfig.showEdges && <div style={{ fontSize: "11px", color: "#888" }}>({gridW} patroon + 2 kantsteken)</div>}
+                  </div>
+                </Panel>
+                {stitchStats && (
+                  <Panel title="Garen verbruik">
+                    <div style={{ fontSize: "12px", color: "#555", lineHeight: 1.8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <span style={{ width: "14px", height: "14px", borderRadius: "3px", background: colA.hex, border: "1px solid #ccc", flexShrink: 0 }} />
+                        <span><strong>{colA.name}:</strong> {stitchStats.colorACells.toLocaleString("nl-NL")} ({stitchStats.colorAPercent}%)</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                        <span style={{ width: "14px", height: "14px", borderRadius: "3px", background: colB.hex, border: "1px solid #ccc", flexShrink: 0 }} />
+                        <span><strong>{colB.name}:</strong> {stitchStats.colorBCells.toLocaleString("nl-NL")} ({stitchStats.colorBPercent}%)</span>
+                      </div>
+                      <div style={{ borderTop: `1px solid ${B.border}`, paddingTop: "6px", fontSize: "11px" }}>
+                        Stokjes: {stitchStats.dcCount.toLocaleString("nl-NL")} · Vasten: {stitchStats.scCount.toLocaleString("nl-NL")}
+                      </div>
+                    </div>
+                  </Panel>
+                )}
+                <Panel title="Instellingen">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
+                      <input type="checkbox" checked={projConfig.showEdges} onChange={e => setProjConfig({ ...projConfig, showEdges: e.target.checked })} />
+                      Toon kantsteken
+                    </label>
+                    <select value={projConfig.direction} onChange={e => setProjConfig({ ...projConfig, direction: e.target.value })} style={{ ...inp, width: "100%", textAlign: "left" }}>
+                      <option value="RtoL">Start Rechts (←)</option>
+                      <option value="LtoR">Start Links (→)</option>
+                    </select>
+                  </div>
+                </Panel>
+              </aside>
+            )}
           </div>
         )}
 
         {step === "pattern" && chart && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "8px" }}>
-              <h2 style={{ fontSize: "28px", color: B.orange, margin: 0, fontFamily: F.heading, fontWeight: 700 }}>Geschreven haakpatroon</h2>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                <button onClick={() => setStep("edit")} style={btnSec}>← Editor</button>
-                <button onClick={printChart} style={btnSec}>Print / PDF</button>
-                <button onClick={exportText} style={btnPri}>Download .txt</button>
+          <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: "280px minmax(0,1fr) 260px", gap: "16px", alignItems: "start" }}>
+
+            {/* LEFT: Chart previews */}
+            <div>
+              <div style={panelLabel}>Telpatroon</div>
+              <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                <ChartCanvas chart={chart} setChart={setChart} cellSize={Math.max(2, Math.min(4, Math.floor(250 / Math.max(chart[0].length, chart.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
+              </div>
+              <div style={panelLabel}>Visueel resultaat</div>
+              <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
+                <VisualPreview chart={chart} colA={colA} colB={colB} />
               </div>
             </div>
 
-            <div style={{ marginBottom: "14px" }}>
-              <Panel title="Print instellingen">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-                  <span style={lbl}>Papier:</span>
-                  <select value={printPaper} onChange={e => setPrintPaper(e.target.value)} style={{ ...inp, width: "90px" }}>
-                    <option value="A4">A4</option>
-                    <option value="A3">A3</option>
-                    <option value="Letter">Letter</option>
-                  </select>
-                  <span style={lbl}>Oriëntatie:</span>
-                  <select value={printOrientation} onChange={e => setPrintOrientation(e.target.value)} style={{ ...inp, width: "105px" }}>
-                    <option value="portrait">Staand</option>
-                    <option value="landscape">Liggend</option>
-                  </select>
-                  <span style={lbl}>Marge (mm):</span>
-                  <input type="number" min={3} max={30} step="1" value={printMarginMm} onChange={e => setPrintMarginMm(parseFloat(e.target.value) || 3)} style={{ ...inp, width: "76px" }} />
-                  <span style={lbl}>Grootte:</span>
-                  <select value={printMode} onChange={e => setPrintMode(e.target.value)} style={{ ...inp, width: "170px" }}>
-                    <option value="single">Passend op 1 pagina</option>
-                    <option value="multi">Verspreid over pagina's</option>
-                  </select>
-                  {printMode === "multi" && (
-                    <>
-                      <span style={lbl}>Cel (mm):</span>
-                      <input type="number" min={1.2} max={8} step="0.1" value={printCellMm} onChange={e => setPrintCellMm(parseFloat(e.target.value) || 1.2)} style={{ ...inp, width: "76px" }} />
-                    </>
-                  )}
-                  <button onClick={printChart} style={btnSm}>Open print preview</button>
-                </div>
-                {printLayout && (
-                  <div style={{ marginTop: "8px", fontSize: "12px", color: "#666" }}>
-                    Uitkomst: {printLayout.pagesX} × {printLayout.pagesY} pagina's = <strong>{printLayout.totalPages}</strong> totaal ·
-                    raster per pagina: {printLayout.colsPerPage} kolommen × {printLayout.rowsPerPage} rijen ·
-                    celgrootte: {printLayout.cellMm.toFixed(2)} mm
+            {/* CENTER: Written pattern */}
+            <div style={{
+              background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "6px",
+              padding: "16px", maxHeight: "85vh", overflowY: "auto",
+              fontFamily: F.mono, fontSize: "11px", lineHeight: "1.5",
+            }}>
+              <div style={{ fontWeight: 700, fontSize: "24px", color: B.orange, marginBottom: "4px", letterSpacing: "0.02em", fontFamily: F.heading }}>
+                {patternText.writtenTitle}
+              </div>
+              <div style={{ fontFamily: F.body, fontSize: "11px", color: "#666", lineHeight: 1.6, marginBottom: "12px", paddingBottom: "12px", borderBottom: `1px solid ${B.beige}` }}>
+                <strong>{patternText.colorsLabelInline}:</strong> {templateText(patternText.colorAInfoTemplate, { name: colA.name })} · {templateText(patternText.colorBInfoTemplate, { name: colB.name })}<br />
+                <strong>{patternText.directionLabelInline}:</strong> {projConfig.direction === "RtoL" ? patternText.directionRtoL : patternText.directionLtoR}<br /><br />
+                <strong>{patternText.startLabelInline}:</strong> {templateText(patternText.startInlineTemplate, { name: colA.name, chainCount: chart[0].length + 3, stitchCount: chart[0].length + 2 })}
+              </div>
+              {patternRows.map((r, i) => {
+                const rowNum = i + 1;
+                const colorIdx = getRowColor(rowNum - 1);
+                return (
+                  <div key={i} style={{
+                    padding: "3px 8px",
+                    background: i % 2 === 0 ? "transparent" : B.beige,
+                    borderRadius: "2px", marginBottom: "1px", wordBreak: "break-all",
+                    borderLeft: `3px solid ${colorIdx === 0 ? colA.hex : colB.hex}`,
+                  }}>{r}</div>
+                );
+              })}
+            </div>
+
+            {/* RIGHT SIDEBAR: Print settings & export */}
+            {!isMobile && (
+              <aside style={{ position: "sticky", top: "64px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <Panel title="Print instellingen">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Papier:</span>
+                      <select value={printPaper} onChange={e => setPrintPaper(e.target.value)} style={{ ...inp, width: "80px" }}>
+                        <option value="A4">A4</option><option value="A3">A3</option><option value="Letter">Letter</option>
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Oriëntatie:</span>
+                      <select value={printOrientation} onChange={e => setPrintOrientation(e.target.value)} style={{ ...inp, width: "90px" }}>
+                        <option value="portrait">Staand</option><option value="landscape">Liggend</option>
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Marge:</span>
+                      <input type="number" min={3} max={30} step="1" value={printMarginMm} onChange={e => setPrintMarginMm(parseFloat(e.target.value) || 3)} style={{ ...inp, width: "60px" }} />
+                      <span style={{ fontSize: "11px", color: "#888" }}>mm</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <span style={lbl}>Modus:</span>
+                      <select value={printMode} onChange={e => setPrintMode(e.target.value)} style={{ ...inp, width: "100%", textAlign: "left" }}>
+                        <option value="single">1 pagina</option><option value="multi">Meerdere pagina's</option>
+                      </select>
+                    </div>
+                    {printMode === "multi" && (
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                        <span style={lbl}>Cel:</span>
+                        <input type="number" min={1.2} max={8} step="0.1" value={printCellMm} onChange={e => setPrintCellMm(parseFloat(e.target.value) || 1.2)} style={{ ...inp, width: "60px" }} />
+                        <span style={{ fontSize: "11px", color: "#888" }}>mm</span>
+                      </div>
+                    )}
+                    {printLayout && (
+                      <div style={{ fontSize: "11px", color: "#888", borderTop: `1px solid ${B.border}`, paddingTop: "6px" }}>
+                        {printLayout.pagesX}×{printLayout.pagesY} = {printLayout.totalPages} pagina's · {printLayout.cellMm.toFixed(1)}mm/cel
+                      </div>
+                    )}
                   </div>
-                )}
-              </Panel>
-            </div>
+                </Panel>
+                <Panel title="Export">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <button onClick={printChart} style={btnSm}>Print / PDF</button>
+                    <button onClick={exportText} style={{ ...btnPri, fontSize: "13px", padding: "10px 16px" }}>Download .txt</button>
+                  </div>
+                </Panel>
+              </aside>
+            )}
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "300px 1fr", gap: "20px" }}>
-              <div>
-                <div style={panelLabel}>Telpatroon</div>
-                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
-                  <ChartCanvas chart={chart} setChart={setChart} cellSize={Math.max(2, Math.min(4, Math.floor(270 / Math.max(chart[0].length, chart.length))))} colA={colA} colB={colB} tool={tool} mode="view" config={projConfig} />
-                </div>
-                <div style={panelLabel}>Visueel resultaat (benadering)</div>
-                <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, marginBottom: "12px" }}>
-                  <VisualPreview chart={chart} colA={colA} colB={colB} />
-                </div>
+            {/* Mobile: inline controls */}
+            {isMobile && (
+              <div style={{ marginTop: "16px" }}>
+                <Panel title="Print & Export">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
+                    <select value={printPaper} onChange={e => setPrintPaper(e.target.value)} style={{ ...inp, width: "70px" }}>
+                      <option value="A4">A4</option><option value="A3">A3</option><option value="Letter">Letter</option>
+                    </select>
+                    <select value={printMode} onChange={e => setPrintMode(e.target.value)} style={{ ...inp, width: "auto" }}>
+                      <option value="single">1 pagina</option><option value="multi">Multi</option>
+                    </select>
+                    <button onClick={printChart} style={btnSm}>Print</button>
+                    <button onClick={exportText} style={btnPri}>Download .txt</button>
+                  </div>
+                </Panel>
               </div>
-
-              <div style={{
-                background: B.cream, border: `1px solid ${B.beige}`, borderRadius: "6px",
-                padding: "16px", maxHeight: "80vh", overflowY: "auto",
-                fontFamily: F.mono, fontSize: "11px", lineHeight: "1.5",
-              }}>
-                <div style={{ fontWeight: 700, fontSize: "24px", color: B.orange, marginBottom: "4px", letterSpacing: "0.02em", fontFamily: F.heading }}>
-                  {patternText.writtenTitle}
-                </div>
-                <div style={{ fontFamily: F.body, fontSize: "11px", color: "#666", lineHeight: 1.6, marginBottom: "12px", paddingBottom: "12px", borderBottom: `1px solid ${B.beige}` }}>
-                  <strong>{patternText.colorsLabelInline}:</strong> {templateText(patternText.colorAInfoTemplate, { name: colA.name })} · {templateText(patternText.colorBInfoTemplate, { name: colB.name })}<br />
-                  <strong>{patternText.directionLabelInline}:</strong> {projConfig.direction === "RtoL" ? patternText.directionRtoL : patternText.directionLtoR}<br /><br />
-                  <strong>{patternText.startLabelInline}:</strong> {templateText(patternText.startInlineTemplate, { name: colA.name, chainCount: chart[0].length + 3, stitchCount: chart[0].length + 2 })}
-                </div>
-                {patternRows.map((r, i) => {
-                  const rowNum = i + 1;
-                  const colorIdx = getRowColor(rowNum - 1);
-                  return (
-                    <div key={i} style={{
-                      padding: "3px 8px",
-                      background: i % 2 === 0 ? "transparent" : B.beige,
-                      borderRadius: "2px", marginBottom: "1px", wordBreak: "break-all",
-                      borderLeft: `3px solid ${colorIdx === 0 ? colA.hex : colB.hex}`,
-                    }}>{r}</div>
-                  );
-                })}
-              </div>
-            </div>
+            )}
           </div>
         )}
-          </section>
-        </div>
+          </div>
       </main>
     </div>
   );
@@ -3152,3 +3366,5 @@ const sidebarCloudDot = { width: "10px", height: "10px", borderRadius: "999px", 
 const sidebarCloudTitle = { fontSize: "13px", fontWeight: 700, color: B.orange };
 const sidebarCloudState = { fontSize: "12px", fontWeight: 700, color: B.dark, marginBottom: "4px" };
 const sidebarCloudText = { fontSize: "11px", color: "#6f6c75", lineHeight: 1.4, overflowWrap: "anywhere" };
+const dropdownWrap = { position: "absolute", top: "100%", right: 0, marginTop: "4px", background: B.white, border: `1px solid ${B.border}`, borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: "6px 0", minWidth: "200px", zIndex: 200 };
+const dropdownItem = { display: "block", width: "100%", padding: "10px 16px", fontSize: "13px", color: B.dark, background: "transparent", border: "none", textAlign: "left", cursor: "pointer", fontFamily: F.body };

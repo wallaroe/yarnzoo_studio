@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
 
 // ============================================================

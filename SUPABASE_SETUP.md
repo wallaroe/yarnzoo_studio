@@ -12,25 +12,33 @@ In Supabase dashboard:
 Run this SQL in Supabase SQL editor:
 
 ```sql
+-- Create workspaces table
 create table if not exists public.workspaces (
   user_id uuid primary key references auth.users(id) on delete cascade,
   data jsonb not null default '{"folders":[],"charts":[]}'::jsonb,
   updated_at timestamptz not null default now()
 );
 
+-- Enable RLS
 alter table public.workspaces enable row level security;
 
-create policy if not exists "workspace_select_own"
+-- Drop existing policies if they exist
+drop policy if exists "workspace_select_own" on public.workspaces;
+drop policy if exists "workspace_insert_own" on public.workspaces;
+drop policy if exists "workspace_update_own" on public.workspaces;
+
+-- Create policies
+create policy "workspace_select_own"
 on public.workspaces
 for select
 using (auth.uid() = user_id);
 
-create policy if not exists "workspace_insert_own"
+create policy "workspace_insert_own"
 on public.workspaces
 for insert
 with check (auth.uid() = user_id);
 
-create policy if not exists "workspace_update_own"
+create policy "workspace_update_own"
 on public.workspaces
 for update
 using (auth.uid() = user_id)

@@ -2795,8 +2795,6 @@ export default function App() {
               </Panel>
               <Panel title="Acties">
                 <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                  <button onClick={undo} disabled={!canUndo} style={{ ...btnSm, opacity: canUndo ? 1 : 0.4 }} title="Ongedaan maken (Cmd+Z)">↩ Undo</button>
-                  <button onClick={redo} disabled={!canRedo} style={{ ...btnSm, opacity: canRedo ? 1 : 0.4 }} title="Opnieuw (Cmd+Shift+Z)">↪ Redo</button>
                   <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐ Omkeren</button>
                   <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => [...r].reverse()), { notify: true }); }} style={btnSm}>↔ Spiegel H</button>
                   <button onClick={() => { pushHistory(chart); applyValidatedChart([...chart].reverse(), { notify: true }); }} style={btnSm}>↕ Spiegel V</button>
@@ -2822,6 +2820,12 @@ export default function App() {
               <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: colB.hex, border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px" }}></span> Kleur B: {colB.name}</span>
               <span><span style={{ display: "inline-block", width: "12px", height: "12px", border: "1px solid #aaa", verticalAlign: "middle", marginRight: "4px", textAlign: "center", color: "#333", fontSize: "8px", lineHeight: "12px", background: "#fff" }}>F</span> Symbool = stokje, zonder symbool = vaste</span>
               {projConfig.showEdges && <span><span style={{ display: "inline-block", width: "12px", height: "12px", background: "#eee", border: "1px solid #ccc", verticalAlign: "middle", marginRight: "4px", borderRadius: "50%", textAlign: "center", fontSize: "8px", lineHeight: "12px" }}>●</span> Kantsteek</span>}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px", marginBottom: "8px", alignItems: "center" }}>
+              <button onClick={undo} disabled={!canUndo} style={{ ...btnSm, opacity: canUndo ? 1 : 0.35, fontSize: "13px", padding: "6px 14px" }} title="Ongedaan maken (Cmd+Z)">↩ Ongedaan maken</button>
+              <button onClick={redo} disabled={!canRedo} style={{ ...btnSm, opacity: canRedo ? 1 : 0.35, fontSize: "13px", padding: "6px 14px" }} title="Opnieuw (Cmd+Shift+Z)">↪ Opnieuw</button>
+              {ruleNotice && <span style={{ fontSize: "11px", color: B.orangeHover, fontWeight: 600, marginLeft: "8px" }}>{ruleNotice}</span>}
             </div>
 
             <div style={{ overflow: "auto", maxHeight: "70vh", background: B.white, borderRadius: "6px", padding: "16px", border: `1px solid ${B.beige}` }}>

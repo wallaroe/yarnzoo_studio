@@ -2316,11 +2316,14 @@ export default function App() {
         const imgMaxW = 130, imgMaxH = 160;
         const imgY = 44;
         try {
+          // Detect format from data URL
+          const imgFmt = pdfCoverImage.includes("image/png") ? "PNG" : "JPEG";
           const imgProps = doc.getImageProperties(pdfCoverImage);
-          const ratio = Math.min(imgMaxW / imgProps.width, imgMaxH / imgProps.height);
-          const imgW = imgProps.width * ratio;
-          const imgH = imgProps.height * ratio;
-          doc.addImage(pdfCoverImage, "JPEG", (pw - imgW) / 2, imgY, imgW, imgH, undefined, "MEDIUM");
+          const aspect = imgProps.width / imgProps.height;
+          // Fit within max bounds in mm
+          let imgW = imgMaxW, imgH = imgW / aspect;
+          if (imgH > imgMaxH) { imgH = imgMaxH; imgW = imgH * aspect; }
+          doc.addImage(pdfCoverImage, imgFmt, (pw - imgW) / 2, imgY, imgW, imgH, undefined, "MEDIUM");
           // Pattern name below the photo
           const nameY = imgY + imgH + 10;
           doc.setFont("SketchSolid", "normal");
@@ -2333,7 +2336,7 @@ export default function App() {
           doc.setFontSize(10);
           doc.setTextColor(...darkText);
           doc.text(pdfSubtitle, pw / 2, nameY + titleLines.length * 8 + 4, { align: "center" });
-        } catch (_) {}
+        } catch (e) { console.error("Cover image error:", e); }
       } else {
         // Fallback: orange circle with title (no photo)
         doc.setFillColor(...orange);

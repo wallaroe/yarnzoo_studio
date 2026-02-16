@@ -1197,6 +1197,7 @@ export default function App() {
   const [pdfFinishText, setPdfFinishText] = useState("");
   const [pdfSubtitle, setPdfSubtitle] = useState("Overlay Mozaïek Deken");
   const [pdfGenerating, setPdfGenerating] = useState(false);
+  const [pdfCoverImage, setPdfCoverImage] = useState(null); // data URL of cover photo
   const [patternLanguage, setPatternLanguage] = useState("nl");
   const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
   const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
@@ -2309,25 +2310,48 @@ export default function App() {
       doc.setFontSize(10);
       doc.setTextColor(...darkText);
       doc.text("HAAKPATROON", pw / 2, 38, { align: "center" });
-      // Pattern name in orange circle area
-      doc.setFillColor(...orange);
-      doc.circle(pw / 2, 75, 30, "F");
-      doc.setFont("SketchSolid", "normal");
-      doc.setFontSize(16);
-      doc.setTextColor(255, 255, 255);
-      // Split long titles
-      const titleLines = doc.splitTextToSize(title.toUpperCase(), 50);
-      doc.text(titleLines, pw / 2, 72 - (titleLines.length - 1) * 4, { align: "center" });
-      // Subtitle
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
-      doc.text(pdfSubtitle, pw / 2, 82, { align: "center" });
-      // Dimensions
-      if (chart) {
-        doc.setFontSize(9);
-        doc.setTextColor(...darkText);
-        doc.text(`${chart[0].length} x ${chart.length} steken`, pw / 2, 120, { align: "center" });
+      // Cover photo
+      if (pdfCoverImage) {
+        // Place photo centered, max width 130mm, below subtitle "HAAKPATROON"
+        const imgMaxW = 130, imgMaxH = 160;
+        const imgY = 44;
+        try {
+          const imgProps = doc.getImageProperties(pdfCoverImage);
+          const ratio = Math.min(imgMaxW / imgProps.width, imgMaxH / imgProps.height);
+          const imgW = imgProps.width * ratio;
+          const imgH = imgProps.height * ratio;
+          doc.addImage(pdfCoverImage, "JPEG", (pw - imgW) / 2, imgY, imgW, imgH, undefined, "MEDIUM");
+          // Pattern name below the photo
+          const nameY = imgY + imgH + 10;
+          doc.setFont("SketchSolid", "normal");
+          doc.setFontSize(22);
+          doc.setTextColor(...orange);
+          const titleLines = doc.splitTextToSize(title.toUpperCase(), pw - 40);
+          doc.text(titleLines, pw / 2, nameY, { align: "center" });
+          // Subtitle below name
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10);
+          doc.setTextColor(...darkText);
+          doc.text(pdfSubtitle, pw / 2, nameY + titleLines.length * 8 + 4, { align: "center" });
+        } catch (_) {}
+      } else {
+        // Fallback: orange circle with title (no photo)
+        doc.setFillColor(...orange);
+        doc.circle(pw / 2, 75, 30, "F");
+        doc.setFont("SketchSolid", "normal");
+        doc.setFontSize(16);
+        doc.setTextColor(255, 255, 255);
+        const titleLines = doc.splitTextToSize(title.toUpperCase(), 50);
+        doc.text(titleLines, pw / 2, 72 - (titleLines.length - 1) * 4, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(255, 255, 255);
+        doc.text(pdfSubtitle, pw / 2, 82, { align: "center" });
+        if (chart) {
+          doc.setFontSize(9);
+          doc.setTextColor(...darkText);
+          doc.text(`${chart[0].length} x ${chart.length} steken`, pw / 2, 120, { align: "center" });
+        }
       }
       // Footer on cover
       doc.setFont("helvetica", "normal");
@@ -3636,6 +3660,20 @@ export default function App() {
                 </Panel>
                 <Panel title="PDF Patroon">
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "12px" }}>
+                    <div>
+                      <span style={lbl}>Cover foto:</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                        <input type="file" accept="image/*" onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => setPdfCoverImage(ev.target.result);
+                          reader.readAsDataURL(file);
+                        }} style={{ fontSize: "11px", width: "100%" }} />
+                        {pdfCoverImage && <button onClick={() => setPdfCoverImage(null)} style={{ ...btnSm, padding: "2px 6px", fontSize: "10px" }}>X</button>}
+                      </div>
+                      {pdfCoverImage && <img src={pdfCoverImage} alt="cover" style={{ marginTop: "4px", maxWidth: "100%", maxHeight: "80px", objectFit: "contain", borderRadius: "4px", border: "1px solid #ccc" }} />}
+                    </div>
                     <div>
                       <span style={lbl}>Subtitel:</span>
                       <input type="text" value={pdfSubtitle} onChange={e => setPdfSubtitle(e.target.value)} placeholder="Overlay Mozaïek Deken" style={{ ...inp, width: "100%", marginTop: "2px" }} />

@@ -1058,6 +1058,28 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
 
   const paint = (x, y) => {
     const g = chart.map(r => [...r]);
+    const rowNum = h - y;
+    const rowColorIdx = getRowColor(rowNum - 1); // 0=A, 1=B
+
+    // Color tools: "colorA" places DC on color A rows, "colorB" on color B rows
+    if (tool === "colorA" || tool === "colorB") {
+      const wantColorIdx = tool === "colorA" ? 0 : 1;
+      if (rowColorIdx === wantColorIdx) {
+        // Correct color row — place a DC
+        if (y === h - 1) { onRuleMessage?.("Rij 1 is altijd vaste (geen stokje toegestaan)."); return; }
+        g[y][x] = true;
+        // Remove conflicting adjacent DCs (new DC wins)
+        if (y > 0 && g[y - 1][x]) g[y - 1][x] = false;
+        if (y < h - 1 && g[y + 1][x]) g[y + 1][x] = false;
+      } else {
+        // Wrong color row — remove any DC here so the wanted color shows
+        g[y][x] = false;
+      }
+      const { chart: fixed } = validateNoStacking(g);
+      setChart(fixed);
+      return;
+    }
+
     const nextValue = tool === "symbol" ? true : tool === "erase" ? false : !g[y][x];
 
     if (nextValue && y === h - 1) {
@@ -1066,6 +1088,11 @@ function ChartCanvas({ chart, setChart, cellSize, colA, colB, tool, mode, config
     }
 
     g[y][x] = nextValue;
+    // When placing a DC, the new one always wins over adjacent conflicts
+    if (nextValue) {
+      if (y > 0 && g[y - 1][x]) g[y - 1][x] = false;
+      if (y < h - 1 && g[y + 1][x]) g[y + 1][x] = false;
+    }
     const { chart: fixed, fixes } = validateNoStacking(g);
 
     if (nextValue && !fixed[y][x]) {
@@ -3340,7 +3367,9 @@ export default function App() {
                 <Panel title="Gereedschap">
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     {[
-                      { id: "symbol", label: "Stokje", desc: "Plaats een stokje" },
+                      { id: "colorA", label: `Stokje ${colA.name || "A"}`, desc: "Teken met kleur A", color: colA.hex },
+                      { id: "colorB", label: `Stokje ${colB.name || "B"}`, desc: "Teken met kleur B", color: colB.hex },
+                      { id: "symbol", label: "Stokje", desc: "Plaats stokje (elke rij)" },
                       { id: "erase", label: "Wissen", desc: "Verwijder een stokje" },
                       { id: "toggle", label: "Wissel", desc: "Wissel stokje/leeg" },
                     ].map(t => (
@@ -3348,7 +3377,10 @@ export default function App() {
                         padding: "10px 12px", borderRadius: "8px", border: `2px solid ${tool === t.id ? B.orange : B.border}`,
                         background: tool === t.id ? B.cream : B.white, cursor: "pointer", textAlign: "left",
                       }}>
-                        <div style={{ fontWeight: 700, fontSize: "13px", color: tool === t.id ? B.orange : B.dark }}>{t.label}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {t.color && <span style={{ width: "14px", height: "14px", borderRadius: "3px", background: t.color, border: "1px solid rgba(0,0,0,0.2)", flexShrink: 0 }} />}
+                          <span style={{ fontWeight: 700, fontSize: "13px", color: tool === t.id ? B.orange : B.dark }}>{t.label}</span>
+                        </div>
                         <div style={{ fontSize: "11px", color: "#888", marginTop: "2px" }}>{t.desc}</div>
                       </button>
                     ))}
@@ -3397,14 +3429,16 @@ export default function App() {
               {isMobile && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
                   {[
-                    { id: "symbol", l: "S Stokje" },
-                    { id: "erase", l: "W Wissen" },
-                    { id: "toggle", l: "T Wissel" },
+                    { id: "colorA", l: "A", bg: colA.hex },
+                    { id: "colorB", l: "B", bg: colB.hex },
+                    { id: "symbol", l: "S" },
+                    { id: "erase", l: "W" },
+                    { id: "toggle", l: "T" },
                   ].map(t => (
                     <button key={t.id} onClick={() => setTool(t.id)} style={{
-                      ...btnTool, background: tool === t.id ? B.orange : B.white,
+                      ...btnTool, background: tool === t.id ? (t.bg || B.orange) : B.white,
                       color: tool === t.id ? B.white : B.dark,
-                      borderColor: tool === t.id ? B.orange : B.beige,
+                      borderColor: tool === t.id ? (t.bg || B.orange) : B.beige,
                     }}>{t.l}</button>
                   ))}
                   <button onClick={() => { pushHistory(chart); applyValidatedChart(chart.map(r => r.map(c => !c)), { notify: true }); }} style={btnSm}>◐</button>

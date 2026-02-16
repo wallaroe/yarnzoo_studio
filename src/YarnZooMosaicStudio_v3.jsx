@@ -2246,8 +2246,18 @@ export default function App() {
     }
     setPdfGenerating(true);
     try {
-      // --- PDF Setup (using built-in Helvetica fonts) ---
+      // --- Font & asset loading ---
+      const [sketchMod, logoMod, paperMod] = await Promise.all([
+        import("./fonts/KGSecondChancesSolid.js"),
+        import("./fonts/LogoBlack.js"),
+        import("./fonts/PaperTexture.js"),
+      ]);
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      // Register SketchSolid for headings (Helvetica used for body text)
+      doc.addFileToVFS("KGSecondChancesSolid.ttf", sketchMod.KGSecondChancesSolidFont);
+      doc.addFont("KGSecondChancesSolid.ttf", "SketchSolid", "normal");
+      const logoDataUrl = logoMod.LogoBlackPNG;
+      const paperDataUrl = paperMod.PaperTextureJPG;
 
       const pw = 210, ph = 297; // A4 mm
       const margin = 15;
@@ -2262,6 +2272,8 @@ export default function App() {
       const addPageBg = () => {
         doc.setFillColor(...cream);
         doc.rect(0, 0, pw, ph, "F");
+        // Paper texture overlay
+        try { doc.addImage(paperDataUrl, "JPEG", 0, 0, pw, ph, undefined, "NONE"); } catch (_) {}
       };
 
       const addFooter = (num) => {
@@ -2273,7 +2285,7 @@ export default function App() {
       };
 
       const addHeader = (text1, text2) => {
-        doc.setFont("helvetica", "bold");
+        doc.setFont("SketchSolid", "normal");
         doc.setFontSize(28);
         doc.setTextColor(...orange);
         doc.text(text1, margin, 22);
@@ -2290,20 +2302,17 @@ export default function App() {
       // Orange accent line at top
       doc.setFillColor(...orange);
       doc.rect(0, 0, pw, 3, "F");
-      // Logo text
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(36);
-      doc.setTextColor(...orange);
-      doc.text("YarnZoo", pw / 2, 35, { align: "center" });
+      // Logo image (centered, ~40mm wide)
+      try { doc.addImage(logoDataUrl, "PNG", pw / 2 - 25, 12, 50, 18, undefined, "FAST"); } catch (_) {}
       // Subtitle "HAAKPATROON"
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(...darkText);
-      doc.text("HAAKPATROON", pw / 2, 45, { align: "center" });
+      doc.text("HAAKPATROON", pw / 2, 38, { align: "center" });
       // Pattern name in orange circle area
       doc.setFillColor(...orange);
       doc.circle(pw / 2, 75, 30, "F");
-      doc.setFont("helvetica", "bold");
+      doc.setFont("SketchSolid", "normal");
       doc.setFontSize(16);
       doc.setTextColor(255, 255, 255);
       // Split long titles
@@ -2332,7 +2341,7 @@ export default function App() {
       addPageBg();
       pageNum++;
       // Title
-      doc.setFont("helvetica", "bold");
+      doc.setFont("SketchSolid", "normal");
       doc.setFontSize(24);
       doc.setTextColor(...orange);
       const introTitle = title.toUpperCase();
@@ -2560,17 +2569,14 @@ export default function App() {
       doc.addPage();
       addPageBg();
       pageNum++;
-      // Logo centered
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(32);
-      doc.setTextColor(...orange);
-      doc.text("YarnZoo", pw / 2, ph / 2, { align: "center" });
+      // Logo image centered
+      try { doc.addImage(logoDataUrl, "PNG", pw / 2 - 30, ph / 2 - 15, 60, 22, undefined, "FAST"); } catch (_) {}
       // Contact info
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(...darkText);
-      doc.text("info@yarnzoocrochet.com", pw / 2, ph / 2 + 12, { align: "center" });
-      doc.text("www.yarnzoocrochet.com", pw / 2, ph / 2 + 17, { align: "center" });
+      doc.text("info@yarnzoocrochet.com", pw / 2, ph / 2 + 16, { align: "center" });
+      doc.text("www.yarnzoocrochet.com", pw / 2, ph / 2 + 21, { align: "center" });
       // Copyright
       doc.setFontSize(7);
       doc.text(`Alle rechten voorbehouden. Dit patroon is alleen voor persoonlijk gebruik.`, pw / 2, ph - 20, { align: "center" });

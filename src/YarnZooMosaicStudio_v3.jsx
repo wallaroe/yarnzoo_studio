@@ -839,9 +839,24 @@ function validateNoStacking(chart) {
 }
 
 // ============================================================
+// Threshold Region Helper
+// ============================================================
+function getThresholdForPixel(x, y, regions, globalThreshold) {
+  // Check regions in reverse order (last added = highest priority)
+  for (let i = regions.length - 1; i >= 0; i--) {
+    const region = regions[i];
+    if (x >= region.x && x < region.x + region.width &&
+        y >= region.y && y < region.y + region.height) {
+      return region.threshold;
+    }
+  }
+  return globalThreshold;
+}
+
+// ============================================================
 // Image to Chart Conversion
 // ============================================================
-function imageToChart(img, targetW, targetH, threshold) {
+function imageToChart(img, targetW, targetH, threshold, regions = []) {
   const canvas = document.createElement("canvas");
   canvas.width = targetW;
   canvas.height = targetH;
@@ -849,14 +864,15 @@ function imageToChart(img, targetW, targetH, threshold) {
   ctx.drawImage(img, 0, 0, targetW, targetH);
   const data = ctx.getImageData(0, 0, targetW, targetH).data;
 
-  // 1) Build dark/light mask from source image.
+  // 1) Build dark/light mask from source image with per-pixel thresholds.
   const darkMask = [];
   for (let y = 0; y < targetH; y++) {
     const row = [];
     for (let x = 0; x < targetW; x++) {
       const i = (y * targetW + x) * 4;
       const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      row.push(gray < threshold);
+      const localThreshold = getThresholdForPixel(x, y, regions, threshold);
+      row.push(gray < localThreshold);
     }
     darkMask.push(row);
   }
@@ -1356,6 +1372,11 @@ export default function App() {
   const [gridW, setGridW] = useState(140);
   const [gridH, setGridH] = useState(140);
   const [threshold, setThreshold] = useState(128);
+  const [thresholdRegions, setThresholdRegions] = useState([]);
+  const [isSelectingRegion, setIsSelectingRegion] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(null);
+  const [currentSelection, setCurrentSelection] = useState(null);
+  const [activeRegionId, setActiveRegionId] = useState(null);
   const [chart, setChart] = useState(null);
   const [fixCount, setFixCount] = useState(0);
   const [tool, setTool] = useState("toggle");
@@ -1435,6 +1456,8 @@ export default function App() {
   });
 
   const previewRef = useRef(null);
+  const origImageContainerRef = useRef(null);
+  const origImageRef = useRef(null);
   const selectableFolders = folders.filter(f => f.id !== DELETED_FOLDER_ID);
   const findFolderName = (id) => folders.find(f => f.id === id)?.name || "Onbekend";
   const cloudStatusLabel = {
@@ -1943,6 +1966,9 @@ export default function App() {
     setImgEl(null);
     setChart(null);
     setFixCount(0);
+    setThresholdRegions([]);
+    setActiveRegionId(null);
+    setIsSelectingRegion(false);
     setStep("upload");
     setOpenMenu("");
   };
@@ -2156,6 +2182,9 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       setOrigImage(ev.target.result);
+      setThresholdRegions([]);
+      setActiveRegionId(null);
+      setIsSelectingRegion(false);
       const img = new Image();
       img.onload = () => {
         setImgEl(img);
@@ -2170,7 +2199,7 @@ export default function App() {
 
   useEffect(() => {
     if (step !== "adjust" || !previewRef.current || !imgEl) return;
-    const { chart: preview } = imageToChart(imgEl, gridW, gridH, threshold);
+    const { chart: preview } = imageToChart(imgEl, gridW, gridH, threshold, thresholdRegions);
     const c = previewRef.current;
     const ctx = c.getContext("2d");
     const edgeCols = projConfig.showEdges ? 2 : 0;
@@ -2208,7 +2237,7 @@ export default function App() {
         if (y < gridH - 1) ctx.fillRect(vx * s, (y + 1) * s, s, s);
       }
     }
-  }, [step, imgEl, gridW, gridH, threshold, colA, colB, projConfig.showEdges]);
+  }, [step, imgEl, gridW, gridH, threshold, thresholdRegions, colA, colB, projConfig.showEdges]);
 
   useEffect(() => {
     if (step !== "adjust" || !syncCalculatorToGrid || !calculatorResult) return;
@@ -2219,7 +2248,7 @@ export default function App() {
   }, [step, syncCalculatorToGrid, calculatorResult, gridW, gridH]);
 
   const confirmGrid = () => {
-    const { chart: c, fixes } = imageToChart(imgEl, gridW, gridH, threshold);
+    const { chart: c, fixes } = imageToChart(imgEl, gridW, gridH, threshold, thresholdRegions);
     setChart(c);
     setFixCount(fixes);
     setCellSize(Math.max(2, Math.min(10, Math.floor(900 / Math.max(gridW, gridH)))));
@@ -2230,6 +2259,79 @@ export default function App() {
     if (!calculatorResult) return;
     setGridW(calculatorResult.targetPatternColumns);
     setGridH(calculatorResult.calculatedRows);
+  };
+
+  // Threshold region selection handlers
+  const getImageCoords = (e) => {
+    if (!origImageRef.current || !imgEl) return null;
+    const rect = origImageRef.current.getBoundingClientRect();
+    const imgWidth = origImageRef.current.offsetWidth;
+    const imgHeight = origImageRef.current.offsetHeight;
+    const relX = (e.clientX - rect.left) / imgWidth;
+    const relY = (e.clientY - rect.top) / imgHeight;
+    // Convert to grid coordinates
+    const gridX = Math.floor(relX * gridW);
+    const gridY = Math.floor(relY * gridH);
+    return { x: Math.max(0, Math.min(gridW - 1, gridX)), y: Math.max(0, Math.min(gridH - 1, gridY)) };
+  };
+
+  const handleImageMouseDown = (e) => {
+    if (!isSelectingRegion) return;
+    e.preventDefault();
+    const coords = getImageCoords(e);
+    if (coords) {
+      setSelectionStart(coords);
+      setCurrentSelection({ x: coords.x, y: coords.y, width: 1, height: 1 });
+    }
+  };
+
+  const handleImageMouseMove = (e) => {
+    if (!isSelectingRegion || !selectionStart) return;
+    const coords = getImageCoords(e);
+    if (coords) {
+      const x1 = Math.min(selectionStart.x, coords.x);
+      const y1 = Math.min(selectionStart.y, coords.y);
+      const x2 = Math.max(selectionStart.x, coords.x);
+      const y2 = Math.max(selectionStart.y, coords.y);
+      setCurrentSelection({ x: x1, y: y1, width: x2 - x1 + 1, height: y2 - y1 + 1 });
+    }
+  };
+
+  const handleImageMouseUp = (e) => {
+    if (!isSelectingRegion || !selectionStart) return;
+    const coords = getImageCoords(e);
+    if (coords) {
+      const x1 = Math.min(selectionStart.x, coords.x);
+      const y1 = Math.min(selectionStart.y, coords.y);
+      const x2 = Math.max(selectionStart.x, coords.x);
+      const y2 = Math.max(selectionStart.y, coords.y);
+      const width = x2 - x1 + 1;
+      const height = y2 - y1 + 1;
+      if (width >= 2 && height >= 2) {
+        const newRegion = {
+          id: Date.now().toString(),
+          x: x1,
+          y: y1,
+          width,
+          height,
+          threshold,
+        };
+        setThresholdRegions(prev => [...prev, newRegion]);
+        setActiveRegionId(newRegion.id);
+      }
+    }
+    setSelectionStart(null);
+    setCurrentSelection(null);
+    setIsSelectingRegion(false);
+  };
+
+  const removeThresholdRegion = (id) => {
+    setThresholdRegions(prev => prev.filter(r => r.id !== id));
+    if (activeRegionId === id) setActiveRegionId(null);
+  };
+
+  const updateRegionThreshold = (id, newThreshold) => {
+    setThresholdRegions(prev => prev.map(r => r.id === id ? { ...r, threshold: newThreshold } : r));
   };
 
   const patternText = patternTexts[patternLanguage] || patternTexts.nl || normalizePatternTexts(null).nl;
@@ -3384,11 +3486,67 @@ export default function App() {
                 </Panel>
 
                 <Panel title="Drempel (licht / donker)">
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px" }}>Meer stokjes</span>
-                    <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
-                    <span style={{ fontSize: "11px" }}>Minder stokjes</span>
-                    <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span style={{ fontSize: "11px" }}>Meer stokjes</span>
+                      <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
+                      <span style={{ fontSize: "11px" }}>Minder stokjes</span>
+                      <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                    </div>
+                    <div style={{ borderTop: `1px solid ${B.beige}`, paddingTop: "8px" }}>
+                      <button
+                        onClick={() => setIsSelectingRegion(!isSelectingRegion)}
+                        style={{
+                          ...btnSm,
+                          background: isSelectingRegion ? B.orange : B.white,
+                          color: isSelectingRegion ? B.white : B.dark,
+                          borderColor: isSelectingRegion ? B.orange : B.beige,
+                          fontWeight: 600,
+                          fontSize: "11px",
+                        }}
+                      >
+                        {isSelectingRegion ? "Annuleren" : "+ Selecteer gebied"}
+                      </button>
+                      {thresholdRegions.length > 0 && (
+                        <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <div style={{ fontSize: "10px", fontWeight: 700, color: B.dark, textTransform: "uppercase", letterSpacing: "0.5px" }}>Gebieden:</div>
+                          {thresholdRegions.map((region, idx) => (
+                            <div
+                              key={region.id}
+                              onClick={() => setActiveRegionId(region.id)}
+                              style={{
+                                display: "flex",
+                                gap: "6px",
+                                alignItems: "center",
+                                padding: "4px 6px",
+                                background: activeRegionId === region.id ? B.cream : B.white,
+                                border: `1px solid ${activeRegionId === region.id ? B.orange : B.beige}`,
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <span style={{ fontSize: "11px", fontWeight: 600, color: B.orange, minWidth: "16px" }}>{idx + 1}</span>
+                              <input
+                                type="range"
+                                min={30}
+                                max={230}
+                                value={region.threshold}
+                                onChange={e => updateRegionThreshold(region.id, parseInt(e.target.value))}
+                                onClick={e => e.stopPropagation()}
+                                style={{ width: "80px" }}
+                              />
+                              <span style={{ fontSize: "10px", color: "#888", minWidth: "24px" }}>{region.threshold}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); removeThresholdRegion(region.id); }}
+                                style={{ ...btnSm, padding: "2px 6px", fontSize: "10px", color: "#888", borderColor: B.beige }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Panel>
 
@@ -3436,9 +3594,89 @@ export default function App() {
                   </div>
                 </div>
                 <div>
-                  <div style={panelLabel}>Originele afbeelding</div>
-                  <div style={{ background: B.white, borderRadius: "6px", padding: "12px", border: `1px solid ${B.beige}`, textAlign: "center" }}>
-                    <img src={origImage} alt="Original" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "6px" }} />
+                  <div style={panelLabel}>Originele afbeelding {isSelectingRegion && <span style={{ color: B.orange, fontSize: "10px" }}>(sleep om gebied te selecteren)</span>}</div>
+                  <div
+                    ref={origImageContainerRef}
+                    style={{
+                      background: B.white,
+                      borderRadius: "6px",
+                      padding: "12px",
+                      border: `1px solid ${isSelectingRegion ? B.orange : B.beige}`,
+                      textAlign: "center",
+                    }}
+                  >
+                    {/* Wrapper that sizes to the image for proper overlay positioning */}
+                    <div
+                      style={{
+                        display: "inline-block",
+                        position: "relative",
+                        cursor: isSelectingRegion ? "crosshair" : "default",
+                      }}
+                      onMouseDown={handleImageMouseDown}
+                      onMouseMove={handleImageMouseMove}
+                      onMouseUp={handleImageMouseUp}
+                      onMouseLeave={() => { if (selectionStart) { setSelectionStart(null); setCurrentSelection(null); } }}
+                    >
+                      <img
+                        ref={origImageRef}
+                        src={origImage}
+                        alt="Original"
+                        style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "6px", userSelect: "none", display: "block" }}
+                        draggable={false}
+                      />
+                      {/* Current selection rectangle while dragging */}
+                      {currentSelection && origImageRef.current && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: `${(currentSelection.x / gridW) * 100}%`,
+                            top: `${(currentSelection.y / gridH) * 100}%`,
+                            width: `${(currentSelection.width / gridW) * 100}%`,
+                            height: `${(currentSelection.height / gridH) * 100}%`,
+                            border: `2px dashed ${B.orange}`,
+                            background: "rgba(231, 64, 22, 0.2)",
+                            borderRadius: "4px",
+                            pointerEvents: "none",
+                          }}
+                        />
+                      )}
+                      {/* Saved region overlays */}
+                      {thresholdRegions.map((region, idx) => {
+                        const isActive = activeRegionId === region.id;
+                        return (
+                          <div
+                            key={region.id}
+                            onClick={() => setActiveRegionId(region.id)}
+                            style={{
+                              position: "absolute",
+                              left: `${(region.x / gridW) * 100}%`,
+                              top: `${(region.y / gridH) * 100}%`,
+                              width: `${(region.width / gridW) * 100}%`,
+                              height: `${(region.height / gridH) * 100}%`,
+                              border: `2px solid ${isActive ? B.orange : "rgba(231, 64, 22, 0.6)"}`,
+                              background: isActive ? "rgba(231, 64, 22, 0.15)" : "rgba(231, 64, 22, 0.08)",
+                              borderRadius: "4px",
+                              pointerEvents: isSelectingRegion ? "none" : "auto",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span style={{
+                              position: "absolute",
+                              top: "2px",
+                              left: "2px",
+                              background: B.orange,
+                              color: B.white,
+                              fontSize: "9px",
+                              fontWeight: 700,
+                              padding: "1px 4px",
+                              borderRadius: "3px",
+                            }}>
+                              {idx + 1}: {region.threshold}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3545,11 +3783,67 @@ export default function App() {
                   </Panel>
 
                   <Panel title="Drempel (licht / donker)">
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <span style={{ fontSize: "11px" }}>Meer stokjes</span>
-                      <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
-                      <span style={{ fontSize: "11px" }}>Minder stokjes</span>
-                      <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <span style={{ fontSize: "11px" }}>Meer stokjes</span>
+                        <input type="range" min={30} max={230} value={threshold} onChange={e => setThreshold(parseInt(e.target.value))} style={{ width: "120px" }} />
+                        <span style={{ fontSize: "11px" }}>Minder stokjes</span>
+                        <span style={{ fontSize: "11px", color: "#888" }}>{threshold}</span>
+                      </div>
+                      <div style={{ borderTop: `1px solid ${B.beige}`, paddingTop: "8px" }}>
+                        <button
+                          onClick={() => setIsSelectingRegion(!isSelectingRegion)}
+                          style={{
+                            ...btnSm,
+                            background: isSelectingRegion ? B.orange : B.white,
+                            color: isSelectingRegion ? B.white : B.dark,
+                            borderColor: isSelectingRegion ? B.orange : B.beige,
+                            fontWeight: 600,
+                            fontSize: "11px",
+                          }}
+                        >
+                          {isSelectingRegion ? "Annuleren" : "+ Selecteer gebied"}
+                        </button>
+                        {thresholdRegions.length > 0 && (
+                          <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <div style={{ fontSize: "10px", fontWeight: 700, color: B.dark, textTransform: "uppercase", letterSpacing: "0.5px" }}>Gebieden:</div>
+                            {thresholdRegions.map((region, idx) => (
+                              <div
+                                key={region.id}
+                                onClick={() => setActiveRegionId(region.id)}
+                                style={{
+                                  display: "flex",
+                                  gap: "6px",
+                                  alignItems: "center",
+                                  padding: "4px 6px",
+                                  background: activeRegionId === region.id ? B.cream : B.white,
+                                  border: `1px solid ${activeRegionId === region.id ? B.orange : B.beige}`,
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <span style={{ fontSize: "11px", fontWeight: 600, color: B.orange, minWidth: "16px" }}>{idx + 1}</span>
+                                <input
+                                  type="range"
+                                  min={30}
+                                  max={230}
+                                  value={region.threshold}
+                                  onChange={e => updateRegionThreshold(region.id, parseInt(e.target.value))}
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ width: "80px" }}
+                                />
+                                <span style={{ fontSize: "10px", color: "#888", minWidth: "24px" }}>{region.threshold}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); removeThresholdRegion(region.id); }}
+                                  style={{ ...btnSm, padding: "2px 6px", fontSize: "10px", color: "#888", borderColor: B.beige }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </Panel>
 

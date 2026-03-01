@@ -493,22 +493,29 @@ function drawChartVectorInPDF({
 
   // Draw F symbols - only if cells are large enough
   if (cellMm >= 0.3) {
-    doc.setTextColor(30, 30, 30);
-    // Font size in points - cellMm * 2.83 converts mm to points, then scale by 0.7
-    const symbolFontSize = Math.max(4, cellMm * 2);
+    doc.setTextColor(0, 0, 0);
+    // Font size in points - make it visible
+    const symbolFontSize = Math.max(6, cellMm * 2.5);
     doc.setFontSize(symbolFontSize);
     doc.setFont("helvetica", "bold");
+
+    // DEBUG: Log info to console
+    console.log("PDF F symbols - cellMm:", cellMm, "fontSize:", symbolFontSize, "chartRows:", chart.length, "chartCols:", chart[0]?.length);
+
+    let fCount = 0;
     for (let gy = startRow; gy < actualEndRow; gy++) {
       for (let gx = 0; gx < totalCols; gx++) {
         if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
         const patternX = gx - xOffset;
         if (patternX < 0 || patternX >= w) continue;
         if (!chart[gy] || !chart[gy][patternX]) continue;
+        fCount++;
         const cellX = offsetX + gx * cellMm + cellMm / 2;
         const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
         doc.text("F", cellX, cellY, { align: "center" });
       }
     }
+    console.log("PDF F symbols drawn:", fCount);
   }
 
   // Draw thin grid lines

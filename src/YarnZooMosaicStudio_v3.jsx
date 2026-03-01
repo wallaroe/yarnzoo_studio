@@ -661,20 +661,24 @@ function buildPrintPageImage({
   }
 
   // Draw F symbols - matching editor logic EXACTLY
-  ctx.fillStyle = "#1a1a1a";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const symbolFontPx = Math.max(10, cellPx * 0.55);
-  ctx.font = `bold ${symbolFontPx}px monospace`;
-  for (let y = startRow; y < endRow; y++) {
-    for (let x = 0; x < w; x++) {
-      if (!chart[y] || !chart[y][x]) continue;
-      // Convert chart (x,y) to visual grid position
-      const visualX = xOffset + x;
-      // Only draw if within visible page area
-      if (visualX < startCol || visualX >= endCol) continue;
-      const { x: px, y: py } = cellBounds(visualX, y);
-      ctx.fillText("F", px + cellPx / 2, py + cellPx / 2);
+  // Scale font with cell size (55% of cell), minimum 1px for very small cells
+  const symbolFontPx = Math.max(1, cellPx * 0.55);
+  // Only draw F symbols if they would be at least 2px (otherwise too small to see)
+  if (symbolFontPx >= 2) {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${symbolFontPx}px monospace`;
+    for (let y = startRow; y < endRow; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!chart[y] || !chart[y][x]) continue;
+        // Convert chart (x,y) to visual grid position
+        const visualX = xOffset + x;
+        // Only draw if within visible page area
+        if (visualX < startCol || visualX >= endCol) continue;
+        const { x: px, y: py } = cellBounds(visualX, y);
+        ctx.fillText("F", px + cellPx / 2, py + cellPx / 2);
+      }
     }
   }
 

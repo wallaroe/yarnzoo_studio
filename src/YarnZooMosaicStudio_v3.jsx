@@ -413,6 +413,169 @@ function computePrintLayout({ chartWidth, chartHeight, showEdges, paper, orienta
   };
 }
 
+// Vector-based chart drawing directly into PDF (sharp at any zoom level)
+function drawChartVectorInPDF({
+  doc,
+  chart,
+  colA,
+  colB,
+  config,
+  startX,
+  startY,
+  availableWidth,
+  availableHeight,
+  startRow = 0,
+  endRow = null,
+  showAllColumnNumbers = true, // false = only show every 10th column number
+}) {
+  const w = chart[0].length;
+  const h = chart.length;
+  const actualEndRow = endRow !== null ? endRow : h;
+  const visibleRows = actualEndRow - startRow;
+  const xOffset = config.showEdges ? 1 : 0;
+  const totalCols = w + (config.showEdges ? 2 : 0);
+
+  // Calculate cell size to fit in available space with proper margins for labels
+  const rowLabelWidth = 10; // mm for row numbers on each side
+  const colLabelHeight = 5; // mm for column numbers top/bottom (small horizontal text)
+  const chartAreaW = availableWidth - rowLabelWidth * 2;
+  const chartAreaH = availableHeight - colLabelHeight * 2;
+  const cellMm = Math.min(chartAreaW / totalCols, chartAreaH / visibleRows);
+
+  // Actual chart dimensions
+  const chartW = totalCols * cellMm;
+  const chartH = visibleRows * cellMm;
+
+  // Center the chart
+  const offsetX = startX + rowLabelWidth + (chartAreaW - chartW) / 2;
+  const offsetY = startY + colLabelHeight + (chartAreaH - chartH) / 2;
+
+  // Parse colors
+  const hexToRgb = (hex) => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+
+  const getRowColor = (rowIdx) => (rowIdx % 2 === 0 ? 0 : 1);
+  const getRowHex = (globalY) => {
+    const rowNum = h - globalY;
+    return getRowColor(rowNum - 1) === 0 ? colA.hex : colB.hex;
+  };
+
+  // Draw cells
+  for (let gy = startRow; gy < actualEndRow; gy++) {
+    for (let gx = 0; gx < totalCols; gx++) {
+      const cellX = offsetX + gx * cellMm;
+      const cellY = offsetY + (gy - startRow) * cellMm;
+
+      // Determine cell color
+      let cellHex = getRowHex(gy);
+      if (!config.showEdges || (gx !== 0 && gx !== totalCols - 1)) {
+        if (gx >= xOffset && gx < xOffset + w && gy > 0) {
+          const patternX = gx - xOffset;
+          if (chart[gy - 1] && chart[gy - 1][patternX]) {
+            cellHex = getRowHex(gy - 1);
+          }
+        }
+      }
+      const rgb = hexToRgb(cellHex);
+      doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+      doc.rect(cellX, cellY, cellMm, cellMm, "F");
+
+      // Draw edge stitch indicator (small white dot)
+      if (config.showEdges && (gx === 0 || gx === totalCols - 1)) {
+        doc.setFillColor(255, 255, 255);
+        doc.circle(cellX + cellMm / 2, cellY + cellMm / 2, cellMm * 0.12, "F");
+      }
+    }
+  }
+
+  // Draw F symbols - only if cells are large enough
+  if (cellMm >= 0.8) {
+    doc.setTextColor(30, 30, 30);
+    const symbolFontSize = Math.max(1.5, cellMm * 0.6);
+    doc.setFontSize(symbolFontSize);
+    doc.setFont("helvetica", "bold");
+    for (let gy = startRow; gy < actualEndRow; gy++) {
+      for (let gx = 0; gx < totalCols; gx++) {
+        if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
+        const patternX = gx - xOffset;
+        if (patternX < 0 || patternX >= w) continue;
+        if (!chart[gy] || !chart[gy][patternX]) continue;
+        const cellX = offsetX + gx * cellMm + cellMm / 2;
+        const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
+        doc.text("F", cellX, cellY, { align: "center" });
+      }
+    }
+  }
+
+  // Draw thin grid lines
+  doc.setDrawColor(100, 100, 100);
+  doc.setLineWidth(0.05);
+  // Vertical lines
+  for (let x = 0; x <= totalCols; x++) {
+    const px = offsetX + x * cellMm;
+    doc.line(px, offsetY, px, offsetY + chartH);
+  }
+  // Horizontal lines
+  for (let y = 0; y <= visibleRows; y++) {
+    const py = offsetY + y * cellMm;
+    doc.line(offsetX, py, offsetX + chartW, py);
+  }
+
+  // Thicker lines every 10 rows/cols
+  doc.setDrawColor(50, 50, 50);
+  doc.setLineWidth(0.15);
+  for (let x = 0; x <= totalCols; x++) {
+    const colNum = config.direction === "RtoL" ? totalCols - x : x + 1;
+    if (colNum % 10 === 0 || x === 0 || x === totalCols) {
+      const px = offsetX + x * cellMm;
+      doc.line(px, offsetY, px, offsetY + chartH);
+    }
+  }
+  for (let y = 0; y <= visibleRows; y++) {
+    const rowNum = h - (startRow + y);
+    if (rowNum % 10 === 0 || y === 0 || y === visibleRows) {
+      const py = offsetY + y * cellMm;
+      doc.line(offsetX, py, offsetX + chartW, py);
+    }
+  }
+
+  // Draw row numbers (left and right) - EVERY row gets a number
+  doc.setTextColor(68, 68, 68);
+  const rowFontSize = Math.max(1.5, Math.min(3, cellMm * 0.8));
+  doc.setFontSize(rowFontSize);
+  doc.setFont("helvetica", "bold");
+  for (let gy = startRow; gy < actualEndRow; gy++) {
+    const rowNum = h - gy;
+    const cellY = offsetY + (gy - startRow) * cellMm + cellMm / 2 + rowFontSize * 0.12;
+    // Left
+    doc.text(`${rowNum}`, offsetX - 0.5, cellY, { align: "right" });
+    // Right
+    doc.text(`${rowNum}`, offsetX + chartW + 0.5, cellY, { align: "left" });
+  }
+
+  // Draw column numbers (top and bottom) - HORIZONTAL, scaled to fit cell width
+  // Font size is calculated so 3-digit numbers fit within the cell width WITH spacing
+  if (showAllColumnNumbers) {
+    // Calculate font size: 3 chars + spacing must fit in cellMm width
+    // Using divisor of 2.5 instead of 1.8 to leave visible gaps between numbers
+    const colFontSizePt = Math.max(1.2, (cellMm / 2.5) * 2.83);
+    doc.setFontSize(colFontSizePt);
+    for (let gx = 0; gx < totalCols; gx++) {
+      const colNum = config.direction === "RtoL" ? totalCols - gx : gx + 1;
+      const cellX = offsetX + gx * cellMm + cellMm / 2;
+      // Top - centered above column
+      doc.text(`${colNum}`, cellX, offsetY - 0.8, { align: "center" });
+      // Bottom - centered below column
+      doc.text(`${colNum}`, cellX, offsetY + chartH + colFontSizePt * 0.4, { align: "center" });
+    }
+  }
+
+  return { chartW, chartH, cellMm, offsetX, offsetY };
+}
+
 function buildPrintPageImage({
   chart,
   colA,
@@ -422,6 +585,7 @@ function buildPrintPageImage({
   pageX,
   pageY,
   dpi = 180,
+  showSymbols = true,
 }) {
   const w = chart[0].length;
   const h = chart.length;
@@ -439,12 +603,12 @@ function buildPrintPageImage({
 
   const rowDigits = String(h).length;
   const colDigits = String(layout.totalCols).length;
-  const rowFontPx = Math.max(9, Math.min(16, cellPx * 0.54));
-  const colFontPx = Math.max(8, Math.min(14, cellPx * 0.48));
-  const marginLeft = Math.ceil(16 + rowDigits * (rowFontPx * 0.7));
+  const rowFontPx = Math.max(18, Math.min(48, cellPx * 0.85));
+  const colFontPx = Math.max(14, Math.min(40, cellPx * 0.75));
+  const marginLeft = Math.ceil(24 + rowDigits * (rowFontPx * 0.8));
   const marginRight = marginLeft;
-  const marginTop = Math.ceil(14 + colFontPx * 1.5);
-  const marginBottom = Math.ceil(16 + colFontPx * 1.7);
+  const marginTop = Math.ceil(20 + colFontPx * 1.8);
+  const marginBottom = Math.ceil(24 + colFontPx * 2.0);
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(visibleCols * cellPx + marginLeft + marginRight);
@@ -498,10 +662,11 @@ function buildPrintPageImage({
     }
   }
 
-  ctx.fillStyle = "#1f1f1f";
+  ctx.fillStyle = "#1a1a1a";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `${Math.max(6, cellPx * 0.46)}px monospace`;
+  const symbolFontPx = Math.max(10, cellPx * 0.55);
+  ctx.font = `bold ${symbolFontPx}px monospace`;
   for (let gy = startRow; gy < endRow; gy++) {
     for (let gx = startCol; gx < endCol; gx++) {
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
@@ -509,7 +674,7 @@ function buildPrintPageImage({
       if (patternX < 0 || patternX >= w) continue;
       if (!chart[gy][patternX]) continue;
       const { x, y } = cellBounds(gx, gy);
-      ctx.fillText("F", x + cellPx / 2, y + cellPx / 2 + cellPx * 0.03);
+      ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }
   }
 
@@ -582,28 +747,42 @@ function buildPrintPageImage({
     }
   }
 
-  ctx.fillStyle = "#666";
-  ctx.font = `${rowFontPx}px monospace`;
+  ctx.fillStyle = "#444";
+  ctx.font = `bold ${rowFontPx}px monospace`;
   ctx.textBaseline = "middle";
+  const rowLabelOffset = Math.max(10, rowFontPx * 0.5);
   for (let gy = startRow; gy < endRow; gy++) {
     const rowNum = h - gy;
     const y = (gy - startRow) * cellPx + cellPx / 2;
     ctx.textAlign = "right";
-    ctx.fillText(`${rowNum}`, -8, y);
+    ctx.fillText(`${rowNum}`, -rowLabelOffset, y);
     ctx.textAlign = "left";
-    ctx.fillText(`${rowNum}`, visibleCols * cellPx + 8, y);
+    ctx.fillText(`${rowNum}`, visibleCols * cellPx + rowLabelOffset, y);
   }
 
-  ctx.fillStyle = "#666";
-  ctx.font = `${colFontPx}px monospace`;
-  ctx.textAlign = "center";
+  // Column numbers - rotated 90 degrees to fit without overlap
+  ctx.fillStyle = "#444";
+  ctx.font = `bold ${colFontPx}px monospace`;
+  const colLabelOffset = Math.max(6, colFontPx * 0.3);
   for (let gx = startCol; gx < endCol; gx++) {
     const colNum = config.direction === "RtoL" ? layout.totalCols - gx : gx + 1;
     const x = (gx - startCol) * cellPx + cellPx / 2;
-    ctx.textBaseline = "top";
-    ctx.fillText(`${colNum}`, x, visibleRows * cellPx + 6);
-    ctx.textBaseline = "bottom";
-    ctx.fillText(`${colNum}`, x, -6);
+    // Bottom labels - rotated 90 degrees
+    ctx.save();
+    ctx.translate(x, visibleRows * cellPx + colLabelOffset);
+    ctx.rotate(Math.PI / 2);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${colNum}`, 0, 0);
+    ctx.restore();
+    // Top labels - rotated -90 degrees
+    ctx.save();
+    ctx.translate(x, -colLabelOffset);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${colNum}`, 0, 0);
+    ctx.restore();
   }
 
   return {
@@ -1225,6 +1404,9 @@ export default function App() {
   const [pdfSubtitle, setPdfSubtitle] = useState("Overlay Mozaïek Deken");
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [pdfCoverImage, setPdfCoverImage] = useState(null); // data URL of cover photo
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveDraftTitle, setSaveDraftTitle] = useState("");
+  const [saveDraftFolderId, setSaveDraftFolderId] = useState(DEFAULT_FOLDER_ID);
   const [patternLanguage, setPatternLanguage] = useState("nl");
   const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
   const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
@@ -1712,15 +1894,33 @@ export default function App() {
   };
 
   const saveCurrentChart = () => {
-    const record = buildCurrentChartRecord();
-    if (!record) {
+    if (!chart) {
       alert("Er is nog geen teltekening om op te slaan.");
       return;
     }
+    // Open modal met huidige waarden
+    setSaveDraftTitle(chartTitle);
+    setSaveDraftFolderId(chartFolderId);
+    setShowSaveModal(true);
+  };
+
+  const confirmSaveChart = () => {
+    if (!saveDraftTitle.trim()) {
+      alert("Geef je patroon een naam.");
+      return;
+    }
+    // Update de state met de nieuwe waarden
+    setChartTitle(saveDraftTitle.trim());
+    setChartFolderId(saveDraftFolderId);
+    // Bouw en sla het record op
+    const record = buildCurrentChartRecord({
+      title: saveDraftTitle.trim(),
+      folderId: saveDraftFolderId,
+    });
+    if (!record) return;
     upsertSavedChart(record);
     setCurrentChartId(record.id);
-    setChartTitle(record.title);
-    setChartFolderId(record.folderId);
+    setShowSaveModal(false);
     alert("Chart opgeslagen.");
   };
 
@@ -2350,7 +2550,7 @@ export default function App() {
           // Fit within max bounds in mm
           let imgW = imgMaxW, imgH = imgW / aspect;
           if (imgH > imgMaxH) { imgH = imgMaxH; imgW = imgH * aspect; }
-          doc.addImage(pdfCoverImage, imgFmt, (pw - imgW) / 2, imgY, imgW, imgH, undefined, "MEDIUM");
+          doc.addImage(pdfCoverImage, imgFmt, (pw - imgW) / 2, imgY, imgW, imgH, undefined, "SLOW");
           // Pattern name below the photo
           const nameY = imgY + imgH + 10;
           doc.setFont("SketchSolid", "normal");
@@ -2542,25 +2742,20 @@ export default function App() {
       addPageBg();
       pageNum++;
       addHeader("TELPATROON", "TOTAAL");
-      // Generate chart image using buildPrintPageImage
-      const totalLayout = computePrintLayout({
-        chartWidth: chart[0].length,
-        chartHeight: chart.length,
-        showEdges: projConfig.showEdges,
-        paper: "A4",
-        orientation: "portrait",
-        marginMm: 20,
-        mode: "single",
-        cellMm: 3,
+      // Draw chart as vector graphics (sharp at any zoom level)
+      // For the TOTAAL page with many columns, only show every 10th column number
+      drawChartVectorInPDF({
+        doc,
+        chart,
+        colA,
+        colB,
+        config: projConfig,
+        startX: margin,
+        startY: 32,
+        availableWidth: contentW,
+        availableHeight: ph - 32 - 16,
+        showAllColumnNumbers: true, // TOTAAL page: show all column numbers (rotated 90°)
       });
-      const totalImg = buildPrintPageImage({
-        chart, colA, colB, config: projConfig,
-        layout: totalLayout, pageX: 0, pageY: 0, dpi: 200,
-      });
-      // Add chart image - fit within page
-      const chartImgW = contentW;
-      const chartImgH = ph - 40 - 16; // header + footer space
-      doc.addImage(totalImg.dataUrl, "PNG", margin, 32, chartImgW, chartImgH, undefined, "FAST");
       addFooter(pageNum);
 
       // ---- CHART SECTION PAGES ----
@@ -2577,23 +2772,21 @@ export default function App() {
           doc.setFontSize(9);
           doc.setTextColor(...darkText);
           doc.text(`${sec.label} — rij ${chart.length - sec.endRow + 1} t/m ${chart.length - sec.startRow}`, margin, 30);
-          // Generate section chart image
-          const secLayout = computePrintLayout({
-            chartWidth: sec.chartSlice[0].length,
-            chartHeight: sec.chartSlice.length,
-            showEdges: projConfig.showEdges,
-            paper: "A4",
-            orientation: "portrait",
-            marginMm: 20,
-            mode: "single",
-            cellMm: 3,
+          // Draw section chart as vector graphics
+          drawChartVectorInPDF({
+            doc,
+            chart,
+            colA,
+            colB,
+            config: projConfig,
+            startX: margin,
+            startY: 36,
+            availableWidth: contentW,
+            availableHeight: ph - 36 - 16,
+            startRow: sec.startRow,
+            endRow: sec.endRow,
+            showAllColumnNumbers: true, // Section pages: try to show all numbers
           });
-          const secImg = buildPrintPageImage({
-            chart: sec.chartSlice, colA, colB, config: projConfig,
-            layout: secLayout, pageX: 0, pageY: 0, dpi: 200,
-          });
-          const secImgH = ph - 44 - 16;
-          doc.addImage(secImg.dataUrl, "PNG", margin, 36, contentW, secImgH, undefined, "FAST");
           addFooter(pageNum);
         }
       }
@@ -3761,6 +3954,51 @@ export default function App() {
         )}
           </div>
       </main>
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div style={saveModalOverlay} onClick={() => setShowSaveModal(false)}>
+          <div style={saveModalBox} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setShowSaveModal(false)} style={saveModalCloseBtn}>✕</button>
+            <h2 style={saveModalTitle}>Patroon Opslaan</h2>
+            <div style={saveModalForm}>
+              <div style={saveModalField}>
+                <label style={saveModalLabel}>Naam *</label>
+                <input
+                  type="text"
+                  value={saveDraftTitle}
+                  onChange={(e) => setSaveDraftTitle(e.target.value)}
+                  placeholder="Bijv: Giraffe Patroon"
+                  style={saveModalInput}
+                  autoFocus
+                />
+              </div>
+              <div style={saveModalField}>
+                <label style={saveModalLabel}>Map</label>
+                <select
+                  value={saveDraftFolderId}
+                  onChange={(e) => setSaveDraftFolderId(e.target.value)}
+                  style={saveModalInput}
+                >
+                  {selectableFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              </div>
+              <div style={saveModalStats}>
+                <div>📐 {chart?.[0]?.length || 0} × {chart?.length || 0} steken</div>
+                <div>🎨 {colA.name} & {colB.name}</div>
+              </div>
+              <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                <button onClick={() => setShowSaveModal(false)} style={saveModalCancelBtn}>
+                  Annuleren
+                </button>
+                <button onClick={confirmSaveChart} style={saveModalSaveBtn}>
+                  Opslaan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3986,3 +4224,16 @@ const sidebarCloudState = { fontSize: "12px", fontWeight: 700, color: B.dark, ma
 const sidebarCloudText = { fontSize: "11px", color: "#6f6c75", lineHeight: 1.4, overflowWrap: "anywhere" };
 const dropdownWrap = { position: "absolute", top: "100%", right: 0, marginTop: "4px", background: B.white, border: `1px solid ${B.border}`, borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", padding: "6px 0", minWidth: "200px", zIndex: 200 };
 const dropdownItem = { display: "block", width: "100%", padding: "10px 16px", fontSize: "13px", color: B.dark, background: "transparent", border: "none", textAlign: "left", cursor: "pointer", fontFamily: F.body };
+
+// Save Modal styles
+const saveModalOverlay = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" };
+const saveModalBox = { background: B.white, borderRadius: "16px", padding: "32px", maxWidth: "420px", width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)", position: "relative" };
+const saveModalCloseBtn = { position: "absolute", top: "16px", right: "16px", background: "transparent", border: "none", fontSize: "24px", cursor: "pointer", color: "#999", width: "32px", height: "32px", borderRadius: "50%" };
+const saveModalTitle = { fontSize: "24px", fontWeight: 800, color: B.orange, marginBottom: "24px", fontFamily: F.heading };
+const saveModalForm = { display: "flex", flexDirection: "column", gap: "16px" };
+const saveModalField = { display: "flex", flexDirection: "column", gap: "6px" };
+const saveModalLabel = { fontSize: "12px", fontWeight: 600, color: B.dark, textTransform: "uppercase", letterSpacing: "0.5px" };
+const saveModalInput = { padding: "12px 16px", border: `2px solid ${B.beige}`, borderRadius: "8px", fontSize: "14px", outline: "none", fontFamily: F.body, width: "100%", boxSizing: "border-box" };
+const saveModalStats = { display: "flex", gap: "16px", padding: "12px", background: B.cream, borderRadius: "8px", fontSize: "12px", color: "#666" };
+const saveModalSaveBtn = { flex: 1, background: B.orange, color: B.white, border: "none", borderRadius: "8px", padding: "12px", fontSize: "15px", fontWeight: 700, cursor: "pointer", boxShadow: `0 4px 16px ${B.orange}40` };
+const saveModalCancelBtn = { flex: 1, background: B.white, color: B.dark, border: `2px solid ${B.beige}`, borderRadius: "8px", padding: "12px", fontSize: "15px", fontWeight: 600, cursor: "pointer" };

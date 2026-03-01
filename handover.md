@@ -1,399 +1,171 @@
-# Handover - YarnZoo Mosaic Studio Cloud Edition
+# Handover - YarnZoo Mosaic Studio
 
-Laatst bijgewerkt: 2026-02-13 19:51  
-Projectmap: `/Users/marccastricum/Github_local/yarnzoo_studio`  
-Git remote: `https://github.com/wallaroe/yarnzoo_studio.git`  
+Laatst bijgewerkt: 2026-02-15
+Projectmap: `/Users/marccastricum/Github_local/yarnzoo_studio`
+Git remote: `https://github.com/wallaroe/yarnzoo_studio.git`
 Branch: `main`
+Live: https://yarnzoo-studio.vercel.app
 
 ---
 
-## 🎉 NIEUWE CLOUD FEATURES TOEGEVOEGD (v1.0.0)
+## 1. Huidige Status
 
-### Wat is er vandaag gebouwd:
+### Deployment
+- **Vercel**: Live op https://yarnzoo-studio.vercel.app
+- **Vercel CLI**: Deploy via `npx vercel --prod` (geen GitHub auto-deploy, Hobby plan)
+- **Env vars op Vercel**: `VITE_SUPABASE_URL` en `VITE_SUPABASE_ANON_KEY` geconfigureerd
+- **SPA routing**: `vercel.json` met rewrite naar `index.html`
 
-**Alle 4 de cloud features zijn volledig geïmplementeerd en werken:**
+### Login Gate
+- Op Vercel (met Supabase config): login verplicht voor toegang
+- Lokaal (zonder `.env`): app draait direct zonder login
+- Geregeld via `hasSupabaseConfig` flag in `supabaseClient.js`
+- LoginScreen in `main.jsx` met sign-in, sign-up en wachtwoord reset
 
-1. **🔐 Authentication System**
-   - Email/password signup & login
-   - Password reset functionality
-   - Session management via React Context
-   - User state synchronization
+### UI Redesign (2026-02-15)
+Volledige redesign van sidebar-gebaseerd naar moderne layout:
 
-2. **💾 Cloud Save Patronen**
-   - Charts opslaan in Supabase database
-   - Update bestaande patronen
-   - Metadata: titel, beschrijving, afmetingen, kleuren
-   - Public/private visibility settings
+- **Top bar**: Horizontale workflow stepper (Upload > Conversie > Bewerken > Patroon)
+- **Bestand dropdown**: Nieuw chart, Opslaan, Instellingen, Bibliotheek, Mappen, In/Uitloggen
+- **Edit stap**: 3-koloms (tools | canvas | stats met garen verbruik)
+- **Pattern stap**: 3-koloms (chart previews | geschreven patroon | export/print)
+- **Adjust stap**: 2-koloms (controls sidebar | previews + calculator)
+- **Upload stap**: Gecentreerd, geen sidebars
+- **Mobile**: Hamburger menu met volledige sidebar, inline controls per stap
 
-3. **📚 Workspace Management**
-   - Browse saved charts
-   - Folder organization
-   - Load charts into editor
-   - Delete functionality
-   - Search and filter
-
-4. **🔗 Delen van Patronen**
-   - Genereer deelbare links
-   - Share tokens voor beveiliging
-   - Public charts browse
-   - Copy-to-clipboard
-
----
-
-## 1. Wat is opgeleverd
-
-### Bestaande Features (eerder gebouwd):
-- React + Vite app lokaal werkend op `http://localhost:5173`
-- Hoofdbestand app: `src/YarnZooMosaicStudio_v3.jsx`
-- Chart editor met:
-  - Mosaic conversie uit afbeelding
-  - Bewerken (symbol/erase/toggle)
-  - Richting (RtoL/LtoR)
-  - Kantsteken aan/uit
-  - Export van geschreven patroon
-- Nummering uitgebreid (links/rechts, boven/onder)
-- Calculator (swatch → gewenste maat → kolommen/rijen)
-- Stappenbalk klikbaar
-- Bestandsbeheer lokaal (mappen, bibliotheek, verwijderen/herstel)
-- Basis Supabase integratie (GitHub OAuth, workspace sync)
-
-### Nieuwe Cloud Features (vandaag toegevoegd):
-
-#### Core Libraries:
-- `src/lib/supabase.js` - Supabase client configuratie
-- `src/lib/AuthContext.jsx` - Authentication state management (React Context)
-- `src/lib/database.js` - Database CRUD operations voor charts, folders, sharing
-
-#### UI Components:
-- `src/components/AuthModal.jsx` - Login/Signup modal met email/password
-- `src/components/SaveChartModal.jsx` - Patroon opslaan dialog
-- `src/components/LibraryModal.jsx` - Workspace browser met folders
-- `src/components/ShareModal.jsx` - Share link generator
-- `src/components/CloudToolbar.jsx` - Cloud features toolbar (volledig)
-- `src/SimpleCloudDemo.jsx` - Demo banner (huidige implementatie)
-
-#### Database Schema:
-- `supabase_full_schema.sql` - Complete database schema met:
-  - `charts` tabel (patronen opslag)
-  - `shared_charts` tabel (sharing tokens)
-  - `folders` tabel (organisatie)
-  - `chart_folders` tabel (many-to-many relatie)
-  - Row Level Security (RLS) policies
-  - Indexes voor performance
-  - Auto-update triggers
-
-#### Documentation:
-- `README_CLOUD_FEATURES.md` - Complete feature overzicht & setup
-- `CLOUD_FEATURES_SETUP.md` - Quick setup guide
-- `manual.md` - Gebruikershandleiding (nieuw)
-- `handover.md` - Deze file (bijgewerkt)
+### Editor Features
+- Undo/Redo: Snapshot-based systeem (Cmd+Z / Cmd+Shift+Z), max 50 stappen
+- Stitch statistieken: Per-kleur telling, dc/sc ratio, percentages (useMemo)
+- Tools: Stokje, Wissen, Wissel
+- Transformaties: Omkeren, Spiegel H, Spiegel V, Check (no-stacking validatie)
+- Zoom slider
+- Chart Size Calculator (swatch > gewenste maat > kolommen/rijen)
+- Richting (RtoL/LtoR) en kantsteken toggle
+- Garenpalet beheer (vergrendelde basiskleuren + eigen kleuren)
+- Export geschreven patroon (NL/EN/DE)
 
 ---
 
-## 2. Database Setup Status
-
-### ✅ Completion Status:
-
-1. **`.env` configuratie** - ✅ DONE
-   - `VITE_SUPABASE_URL=https://mmaboaioozsuikiyovpr.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY=sb_publishable_j9mvJihmsHoaQES3WErlVw_Wn23eM7L`
-
-2. **Database Schema** - ✅ DONE
-   - SQL uitgevoerd via Supabase SQL Editor
-   - Alle tabellen aangemaakt
-   - RLS policies actief
-   - Response: "Success. No rows returned"
-
-3. **Testing** - ✅ DONE
-   - App laadt zonder errors
-   - Cloud banner zichtbaar
-   - Auth modal werkt perfect
-   - Database connectie getest
-
----
-
-## 3. Huidige File Structure
+## 2. File Structure
 
 ```
 yarnzoo_studio/
-├── .env                          # Supabase credentials
-├── .env.example                  # Template
+├── .env                              # Supabase credentials (niet in git)
+├── .env.example                      # Template
+├── vercel.json                       # SPA rewrite regel
 ├── src/
-│   ├── main.jsx                  # Entry point met AuthProvider
-│   ├── YarnZooMosaicStudio_v3.jsx  # Main app (bestaand)
-│   ├── SimpleCloudDemo.jsx       # Cloud banner (actief)
+│   ├── main.jsx                      # Entry point: LoginScreen + AuthProvider + AppWithGate
+│   ├── YarnZooMosaicStudio_v3.jsx    # Hoofd-app (~3400 regels, alle UI)
 │   ├── lib/
-│   │   ├── supabase.js          # Supabase client
-│   │   ├── supabaseClient.js    # Legacy client (bestaand)
-│   │   ├── AuthContext.jsx      # Auth state management
-│   │   └── database.js          # CRUD operations
+│   │   ├── supabaseClient.js         # Supabase client (graceful null bij geen config)
+│   │   ├── supabase.js               # Legacy client (NIET gebruiken, throws zonder config)
+│   │   ├── AuthContext.jsx            # Auth state management (React Context)
+│   │   └── database.js               # CRUD operations voor charts/folders/sharing
 │   └── components/
-│       ├── AuthModal.jsx        # Login/Signup
-│       ├── SaveChartModal.jsx   # Save dialog
-│       ├── LibraryModal.jsx     # Workspace browser
-│       ├── ShareModal.jsx       # Share functionality
-│       └── CloudToolbar.jsx     # Full toolbar (geprepareerd)
-├── supabase_full_schema.sql     # Database schema
-├── README_CLOUD_FEATURES.md     # Feature docs
-├── CLOUD_FEATURES_SETUP.md      # Setup guide
-├── manual.md                     # User manual (nieuw)
-└── handover.md                   # Dit bestand
+│       ├── AuthModal.jsx             # Login/Signup modal
+│       ├── SaveChartModal.jsx        # Patroon opslaan dialog
+│       ├── LibraryModal.jsx          # Workspace browser
+│       ├── ShareModal.jsx            # Share link generator
+│       └── CloudToolbar.jsx          # Cloud features toolbar
+├── supabase_full_schema.sql          # Complete database schema met RLS
+└── public/                           # Static assets (fonts, favicon)
+```
+
+### Belangrijk
+- **supabaseClient.js** is de juiste import — geeft `null` terug zonder env vars
+- **supabase.js** is legacy — throws error zonder config, NIET importeren in nieuwe code
+- Alle UI zit in **YarnZooMosaicStudio_v3.jsx** — inline styles, geen CSS bestanden
+- Brand kleuren in `B` constante (regel 8-23), fonts in `F` (regel 25-29)
+
+---
+
+## 3. Architectuur
+
+### Auth Flow
+```
+main.jsx: AppWithGate
+  ├── hasSupabaseConfig === false → <App /> direct (lokaal)
+  ├── loading === true → <LoadingScreen />
+  ├── user === null → <LoginScreen /> (sign-in/sign-up/reset)
+  └── user !== null → <App />
+```
+
+### Workflow Stappen
+1. **Upload**: Afbeelding uploaden of plakken
+2. **Adjust (Conversie)**: Raster afmetingen, drempel, kleuren, calculator
+3. **Edit (Bewerken)**: Canvas editor met tools, undo/redo, transformaties
+4. **Pattern (Patroon)**: Geschreven patroon bekijken, print instellingen, export
+
+### State Management
+- Alle state in de App component via `useState`
+- Auth via React Context (`AuthProvider` in `main.jsx`)
+- Undo/redo via `useRef` (history stack, niet in React state)
+- Stitch stats via `useMemo` (herberekend bij chart wijzigingen)
+- Cloud sync via Supabase realtime (optioneel)
+
+---
+
+## 4. Recent Voltooide Werk
+
+### 2026-02-15: UI Redesign
+- Fase 1: Stitch statistieken berekening (useMemo)
+- Fase 2-4: Top bar met stepper, Bestand dropdown, desktop sidebar verwijderd
+- Fase 5: Context-afhankelijke layouts per stap (edit/pattern/adjust)
+- Fase 6: Polish, build verificatie, deploy
+- Fix: `React` default import toegevoegd voor `React.Fragment` in stepper
+
+### 2026-02-15: Undo/Redo
+- Snapshot-based systeem met `historyRef` en `historyIndexRef`
+- Keyboard shortcuts: Cmd+Z (undo), Cmd+Shift+Z (redo)
+- Knoppen in top bar (desktop) en boven canvas (mobile/edit)
+- Max 50 snapshots
+
+### 2026-02-14: Vercel Deployment + Login Gate
+- Vercel CLI setup en eerste deploy
+- Login gate in `main.jsx` (verplicht op Vercel, bypass lokaal)
+- AuthContext fix: import van `supabaseClient` i.p.v. `supabase`
+
+---
+
+## 5. Git Commits (recent)
+
+```
+7cd02d9 Fix white screen: add React default import for React.Fragment
+af6c24a Redesign UI with top bar stepper and context-sensitive layouts
+e9f26f1 Make undo/redo buttons larger and more visible
+9b418b2 Move undo/redo buttons above canvas for visibility
+f23a499 Add undo/redo system to grid editor
+220c255 Add login gate for Vercel deployment
+80bd86f Prepare for Vercel deployment with cloud features
 ```
 
 ---
 
-## 4. Wat werkt NU (getest & verified):
+## 6. Lokale Development
 
-### Live & Werkend:
-- ✅ App laadt op http://localhost:5173
-- ✅ Cloud banner bovenaan: "☁️ Cloud features beschikbaar!"
-- ✅ "🔐 Probeer Cloud Features" knop
-- ✅ Auth modal opent bij klik
-- ✅ Login/Signup forms werken
-- ✅ Database connectie actief
-- ✅ Supabase authentication ready
-
-### Wat je NU kunt gebruiken:
-1. **Account aanmaken**: Klik cloud features → signup → vul email/wachtwoord in
-2. **Inloggen**: Gebruik credentials
-3. **Patronen maken**: Bestaande editor functionaliteit
-4. **Lokaal opslaan**: Bestaande file management
-
-### Wat je kunt activeren:
-- **Cloud Save**: Gebruik `SaveChartModal` component
-- **Library**: Gebruik `LibraryModal` component  
-- **Sharing**: Gebruik `ShareModal` component
-- **Full Toolbar**: Vervang `SimpleCloudDemo` met `CloudToolbar`
-
----
-
-## 5. Volgende Stappen (Optioneel)
-
-### Om volledige cloud features te activeren:
-
-**Vervang in `src/main.jsx`:**
-```jsx
-// HUIDIGE CODE:
-import SimpleCloudDemo from './SimpleCloudDemo.jsx'
-...
-<SimpleCloudDemo />
-
-// VERVANG MET:
-import CloudToolbar from './components/CloudToolbar.jsx'
-...
-<CloudToolbar 
-  chart={chart} 
-  chartData={{ colA, colB, config }} 
-  currentChartId={currentChartId}
-  onChartLoaded={handleChartLoad}
-/>
-```
-
-Dit activeert:
-- 💾 "Opslaan in Cloud" knop
-- 📚 "Mijn Bibliotheek" knop
-- 🔗 "Delen" knop (als chart opgeslagen is)
-
-### GitHub OAuth (Optioneel):
-Als je GitHub login wilt:
-1. Ga naar Supabase → Authentication → Providers → GitHub
-2. Enable GitHub provider
-3. Vul Client ID en Secret in van GitHub OAuth app
-4. Add callback URL: `https://mmaboaioozsuikiyovpr.supabase.co/auth/v1/callback`
-
----
-
-## 6. Deployment naar Productie
-
-### Voorbereiding:
-1. Commit alle nieuwe files naar git
-2. Push naar GitHub
-3. Deploy op Vercel/Netlify
-
-### Environment Variables (op hosting):
-```
-VITE_SUPABASE_URL=https://mmaboaioozsuikiyovpr.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_j9mvJihmsHoaQES3WErlVw_Wn23eM7L
-```
-
-### Supabase Redirect URLs:
-Voeg toe in Supabase Dashboard → Authentication → URL Configuration:
-- `https://jouw-domein.vercel.app`
-- `http://localhost:5173` (voor lokale dev)
-
----
-
-## 7. Lokale Development
-
-### Start Development Server:
 ```bash
 cd /Users/marccastricum/Github_local/yarnzoo_studio
 npm install
-npm run dev
-```
-
-### Build voor Productie:
-```bash
-npm run build
-npm run preview  # Test production build lokaal
-```
-
-### Database Queries Testen:
-Open browser console op http://localhost:5173 en test:
-```javascript
-// In browser console:
-import { loadUserCharts } from './src/lib/database.js'
-const charts = await loadUserCharts()
-console.log(charts)
+npm run dev          # Start dev server op localhost:5173
+npm run build        # Productie build
+npm run preview      # Test productie build lokaal
+npx vercel --prod    # Deploy naar Vercel
 ```
 
 ---
 
-## 8. Technische Details
+## 7. Bekende Issues
 
-### Database Schema:
-
-**charts table:**
-- Opslag van patronen met grid data, kleuren, configuratie
-- User ownership via `user_id` foreign key
-- Public/private visibility via `is_public` boolean
-- Automatic timestamps (`created_at`, `updated_at`)
-
-**shared_charts table:**
-- Tracking van shares met tokens
-- Many-to-many tussen charts en users
-- `share_token` UUID voor deelbare links
-
-**folders table:**
-- Organisatie van charts per user
-- Custom kleuren voor visuele organisatie
-
-**Security:**
-- Row Level Security (RLS) enabled op alle tabellen
-- Users kunnen alleen eigen data zien/bewerken
-- Public charts zijn voor iedereen leesbaar
-- Share tokens geven tijdelijke toegang
+- **Dubbele Supabase client**: `supabase.js` en `supabaseClient.js` bestaan naast elkaar. Nieuwe code moet `supabaseClient.js` gebruiken.
+- **Mobile layout**: Adjust/Edit/Pattern stappen tonen controls inline op mobile. Werkt maar kan gepolijst worden.
+- **Dropdown hover**: Geen hover-effect op dropdown items (inline styles ondersteunen geen :hover).
 
 ---
 
-## 9. Known Issues & Limitations
+## 8. Mogelijke Volgende Stappen
 
-### Minor Warnings:
-- "Multiple GoTrueClient instances" warning
-  - Oorzaak: Beide `supabase.js` en `supabaseClient.js` initialiseren clients
-  - Impact: Geen - werkt normaal
-  - Fix: Later migreren naar één client
-
-### Niet geïmplementeerd (maar voorbereid):
-- Email verificatie flow (Supabase ondersteunt dit, maar optioneel)
-- Social login providers buiten email/password (GitHub OAuth was in bestaande code)
-- Real-time synchronisatie tussen apparaten (Supabase Realtime beschikbaar)
-- Chart versioning/geschiedenis (database schema ondersteunt dit wel)
-
----
-
-## 10. Code Quality & Best Practices
-
-### Geïmplementeerd:
-- ✅ React Hooks voor state management
-- ✅ Context API voor global auth state
-- ✅ Supabase client singleton pattern
-- ✅ Error handling in database operations
-- ✅ Loading states in UI components
-- ✅ Responsive design
-- ✅ Security via RLS policies
-- ✅ Input validation (email, password length)
-
-### Styling:
-- Inline styles met const objects (consistent met bestaande code)
-- YarnZoo brand kleuren gebruikt
-- Modern UI patterns (modals, overlays, gradients)
-- Mobile-friendly layouts
-
----
-
-## 11. Testing Checklist
-
-### Getest & Working:
-- [x] App laadt zonder errors
-- [x] Cloud banner verschijnt
-- [x] Auth modal opent
-- [x] Login/signup forms tonen correct
-- [x] Database connectie werkt
-- [x] Supabase client initialized
-
-### Te Testen door Gebruiker:
-- [ ] Account aanmaken met email
-- [ ] Inloggen met credentials
-- [ ] Patroon opslaan in cloud (na full toolbar activatie)
-- [ ] Library browsen
-- [ ] Share link genereren
-- [ ] Logout functionaliteit
-- [ ] Multi-device sync
-
----
-
-## 12. Support & Documentation
-
-### Voor Gebruikers:
-- `manual.md` - Complete gebruikershandleiding
-- `README_CLOUD_FEATURES.md` - Feature overzicht
-- `CLOUD_FEATURES_SETUP.md` - Quick start
-
-### Voor Developers:
-- Inline comments in alle nieuwe components
-- JSDoc-style function beschrijvingen waar nodig
-- Clear component props documentation
-
-### Database Docs:
-- `supabase_full_schema.sql` - Volledig gedocumenteerde schema
-- Comments bij elke tabel en policy
-
----
-
-## 13. Contact & Handover Notes
-
-**Huidige Status:** 
-- ✅ Alle 4 cloud features geïmplementeerd
-- ✅ Database setup compleet
-- ✅ UI getest en werkend
-- ✅ Klaar voor gebruik
-
-**Laatste Test:**
-- Datum: 2026-02-13 19:51
-- Browser: Chrome/Modern browser
-- Screenshots: Beschikbaar in brain folder
-- Console: Geen kritieke errors
-
-**Deployment Ready:**
-- Development: ✅ Yes
-- Production: ⏳ Needs deployment + env vars
-
----
-
-## Appendix: Git Commands voor Commit
-
-```bash
-# Add alle nieuwe files
-git add .
-
-# Commit met beschrijving
-git commit -m "Add cloud features: auth, save, library, sharing
-
-- Implement authentication with email/password
-- Add database operations for charts, folders, sharing
-- Create UI components for all cloud features
-- Setup complete Supabase schema with RLS
-- Add user manual and documentation
-- Tested and verified working locally"
-
-# Push naar main
-git push origin main
-```
-
----
-
-**Handover Compleet! 🎉**
-
-Alle features zijn geïmplementeerd, getest en gedocumenteerd.
-De app is klaar voor gebruik en deployment.
+Uit `src/YarnZoo_Roadmap.md`:
+- **P2**: Text-to-grid import (plak telpatroon tekst > grid)
+- **P3**: Pan navigatie (drag-to-scroll op canvas)
+- **P4**: Multi-color support, pattern repeat, stitch library
+- **Design**: Hover-effecten, animaties, mobile polish

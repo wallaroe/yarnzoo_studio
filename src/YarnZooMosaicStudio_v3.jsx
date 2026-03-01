@@ -491,25 +491,11 @@ function drawChartVectorInPDF({
     }
   }
 
-  // Draw F symbols - matching editor logic EXACTLY (lines 1116-1125)
+  // Draw F symbols - matching editor logic exactly (just check chart[y][x])
   const symbolFontSize = Math.max(4, cellMm * 2.5);
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");
-
-  // Debug: count how many F symbols we should draw
-  let fCount = 0;
-  let totalCells = 0;
-  for (let y = startRow; y < actualEndRow; y++) {
-    for (let x = 0; x < w; x++) {
-      totalCells++;
-      if (chart[y] && chart[y][x]) fCount++;
-    }
-  }
-  // Only show alert once (for the first call)
-  if (startRow === 0) {
-    alert(`PDF Debug:\nF symbols: ${fCount} / ${totalCells} (${(fCount/totalCells*100).toFixed(1)}%)\nChart: ${w}x${h}`);
-  }
 
   for (let y = startRow; y < actualEndRow; y++) {
     for (let x = 0; x < w; x++) {

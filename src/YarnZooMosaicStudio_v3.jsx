@@ -492,7 +492,7 @@ function drawChartVectorInPDF({
   }
 
   // Draw F symbols - only if cells are large enough
-  if (cellMm >= 0.8) {
+  if (cellMm >= 0.3) {
     doc.setTextColor(30, 30, 30);
     const symbolFontSize = Math.max(1.5, cellMm * 0.6);
     doc.setFontSize(symbolFontSize);

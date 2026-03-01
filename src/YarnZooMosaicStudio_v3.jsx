@@ -506,8 +506,10 @@ function drawChartVectorInPDF({
       if (chart[y] && chart[y][x]) fCount++;
     }
   }
-  console.log(`PDF F symbols: ${fCount} out of ${totalCells} cells (${(fCount/totalCells*100).toFixed(1)}%)`);
-  console.log(`Chart dimensions: ${w}x${h}, startRow=${startRow}, endRow=${actualEndRow}`);
+  // Only show alert once (for the first call)
+  if (startRow === 0) {
+    alert(`PDF Debug:\nF symbols: ${fCount} / ${totalCells} (${(fCount/totalCells*100).toFixed(1)}%)\nChart: ${w}x${h}`);
+  }
 
   for (let y = startRow; y < actualEndRow; y++) {
     for (let x = 0; x < w; x++) {

@@ -494,7 +494,8 @@ function drawChartVectorInPDF({
   // Draw F symbols - only if cells are large enough
   if (cellMm >= 0.3) {
     doc.setTextColor(30, 30, 30);
-    const symbolFontSize = Math.max(1.5, cellMm * 0.6);
+    // Font size in points - cellMm * 2.83 converts mm to points, then scale by 0.7
+    const symbolFontSize = Math.max(4, cellMm * 2);
     doc.setFontSize(symbolFontSize);
     doc.setFont("helvetica", "bold");
     for (let gy = startRow; gy < actualEndRow; gy++) {
@@ -502,9 +503,7 @@ function drawChartVectorInPDF({
         if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
         const patternX = gx - xOffset;
         if (patternX < 0 || patternX >= w) continue;
-        // Skip first row (gy === 0) and check chart[gy - 1] to match cell coloring logic
-        if (gy === 0) continue;
-        if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
+        if (!chart[gy] || !chart[gy][patternX]) continue;
         const cellX = offsetX + gx * cellMm + cellMm / 2;
         const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
         doc.text("F", cellX, cellY, { align: "center" });
@@ -674,9 +673,7 @@ function buildPrintPageImage({
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
-      // Skip first row (gy === 0) and check chart[gy - 1] to match cell coloring logic
-      if (gy === 0) continue;
-      if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
+      if (!chart[gy] || !chart[gy][patternX]) continue;
       const { x, y } = cellBounds(gx, gy);
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }

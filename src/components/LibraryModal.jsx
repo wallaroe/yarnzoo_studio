@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { loadUserCharts, loadUserFolders, deleteChart, createFolder, deleteFolder } from '../lib/database'
+import { loadUserCharts, loadUserFolders, deleteChart, renameChart, createFolder, deleteFolder } from '../lib/database'
 import { useAuth } from '../lib/AuthContext'
 
 const B = {
@@ -18,6 +18,8 @@ export default function LibraryModal({ onClose, onLoadChart }) {
     const [loading, setLoading] = useState(true)
     const [view, setView] = useState('charts') // 'charts' | 'folders'
     const [newFolderName, setNewFolderName] = useState('')
+    const [editingChartId, setEditingChartId] = useState(null)
+    const [editTitle, setEditTitle] = useState('')
 
     useEffect(() => {
         loadData()
@@ -47,6 +49,29 @@ export default function LibraryModal({ onClose, onLoadChart }) {
     const handleLoadChart = (chart) => {
         onLoadChart(chart)
         onClose()
+    }
+
+    const startEditing = (chart) => {
+        setEditingChartId(chart.id)
+        setEditTitle(chart.title)
+    }
+
+    const cancelEditing = () => {
+        setEditingChartId(null)
+        setEditTitle('')
+    }
+
+    const handleRenameChart = async (chartId) => {
+        if (!editTitle.trim()) {
+            cancelEditing()
+            return
+        }
+
+        const { data, error } = await renameChart(chartId, editTitle.trim())
+        if (!error && data) {
+            setCharts(charts.map(c => c.id === chartId ? { ...c, title: data.title } : c))
+        }
+        cancelEditing()
     }
 
     const handleCreateFolder = async () => {
@@ -109,8 +134,28 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                         {charts.map(chart => (
                                             <div key={chart.id} style={chartCardStyle}>
                                                 <div style={chartHeaderStyle}>
-                                                    <div style={chartTitleStyle}>{chart.title}</div>
-                                                    {chart.is_public && <span style={publicBadge}>🌐 Publiek</span>}
+                                                    {editingChartId === chart.id ? (
+                                                        <div style={editTitleWrap}>
+                                                            <input
+                                                                type="text"
+                                                                value={editTitle}
+                                                                onChange={(e) => setEditTitle(e.target.value)}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') handleRenameChart(chart.id)
+                                                                    if (e.key === 'Escape') cancelEditing()
+                                                                }}
+                                                                style={editTitleInput}
+                                                                autoFocus
+                                                            />
+                                                            <button onClick={() => handleRenameChart(chart.id)} style={editSaveBtn}>✓</button>
+                                                            <button onClick={cancelEditing} style={editCancelBtn}>✕</button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div style={chartTitleStyle}>{chart.title}</div>
+                                                            {chart.is_public && <span style={publicBadge}>🌐 Publiek</span>}
+                                                        </>
+                                                    )}
                                                 </div>
                                                 {chart.description && (
                                                     <div style={chartDescStyle}>{chart.description}</div>
@@ -125,6 +170,13 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                                         style={loadBtnStyle}
                                                     >
                                                         📥 Laden
+                                                    </button>
+                                                    <button
+                                                        onClick={() => startEditing(chart)}
+                                                        style={editBtnStyle}
+                                                        title="Hernoemen"
+                                                    >
+                                                        ✏️
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteChart(chart.id)}
@@ -415,4 +467,49 @@ const folderNameStyle = {
 const folderMetaStyle = {
     fontSize: '11px',
     color: '#999',
+}
+
+const editBtnStyle = {
+    background: 'transparent',
+    border: `1px solid ${B.beige}`,
+    borderRadius: '6px',
+    padding: '8px 12px',
+    fontSize: '13px',
+    cursor: 'pointer',
+}
+
+const editTitleWrap = {
+    display: 'flex',
+    gap: '4px',
+    flex: 1,
+    alignItems: 'center',
+}
+
+const editTitleInput = {
+    flex: 1,
+    padding: '6px 10px',
+    border: `2px solid ${B.orange}`,
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: 600,
+    outline: 'none',
+}
+
+const editSaveBtn = {
+    background: B.darkGreen,
+    color: B.white,
+    border: 'none',
+    borderRadius: '6px',
+    padding: '6px 10px',
+    fontSize: '14px',
+    cursor: 'pointer',
+}
+
+const editCancelBtn = {
+    background: 'transparent',
+    border: `1px solid ${B.beige}`,
+    borderRadius: '6px',
+    padding: '6px 10px',
+    fontSize: '14px',
+    cursor: 'pointer',
 }

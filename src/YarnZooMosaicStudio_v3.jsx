@@ -1407,6 +1407,8 @@ export default function App() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveDraftTitle, setSaveDraftTitle] = useState("");
   const [saveDraftFolderId, setSaveDraftFolderId] = useState(DEFAULT_FOLDER_ID);
+  const [editingLibraryId, setEditingLibraryId] = useState(null);
+  const [editingLibraryTitle, setEditingLibraryTitle] = useState("");
   const [patternLanguage, setPatternLanguage] = useState("nl");
   const [patternTexts, setPatternTexts] = useState(() => loadTranslationConfig().texts);
   const [translationsLocked, setTranslationsLocked] = useState(() => loadTranslationConfig().locked);
@@ -1856,6 +1858,15 @@ export default function App() {
       const exists = prev.some(c => c.id === record.id);
       return exists ? prev.map(c => c.id === record.id ? record : c) : [record, ...prev];
     });
+  };
+
+  const renameLocalChart = (chartId, newTitle) => {
+    if (!newTitle.trim()) return;
+    setSavedCharts(prev => prev.map(c =>
+      c.id === chartId ? { ...c, title: newTitle.trim(), updatedAt: new Date().toISOString() } : c
+    ));
+    setEditingLibraryId(null);
+    setEditingLibraryTitle("");
   };
 
   const buildCurrentChartRecord = (overrides = {}) => {
@@ -3289,15 +3300,41 @@ export default function App() {
               {filteredCharts.map(saved => {
                 const restorable = withinRestoreWindow(saved);
                 const deletedLabel = saved.isDeleted ? (restorable ? "verwijderd (herstelbaar)" : "verwijderd (termijn verlopen)") : "actief";
+                const isEditing = editingLibraryId === saved.id;
                 return (
                   <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ fontSize: "12px", color: "#555" }}>
-                      <strong style={{ color: B.dark }}>{saved.title || "Naamloze chart"}</strong><br />
-                      {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
+                    <div style={{ fontSize: "12px", color: "#555", flex: 1 }}>
+                      {isEditing ? (
+                        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                          <input
+                            type="text"
+                            value={editingLibraryTitle}
+                            onChange={(e) => setEditingLibraryTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") renameLocalChart(saved.id, editingLibraryTitle);
+                              if (e.key === "Escape") { setEditingLibraryId(null); setEditingLibraryTitle(""); }
+                            }}
+                            style={{ ...inp, flex: 1, fontWeight: 600 }}
+                            autoFocus
+                          />
+                          <button style={{ ...btnSm, padding: "4px 8px" }} onClick={() => renameLocalChart(saved.id, editingLibraryTitle)}>✓</button>
+                          <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => { setEditingLibraryId(null); setEditingLibraryTitle(""); }}>✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <strong style={{ color: B.dark }}>{saved.title || "Naamloze chart"}</strong><br />
+                          {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
+                        </>
+                      )}
                     </div>
-                    <button style={btnSm} onClick={() => openSavedChart(saved)}>
-                      {saved.isDeleted ? "Herstel + open" : "Open"}
-                    </button>
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      {!isEditing && (
+                        <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => { setEditingLibraryId(saved.id); setEditingLibraryTitle(saved.title || ""); }} title="Hernoemen">✏️</button>
+                      )}
+                      <button style={btnSm} onClick={() => openSavedChart(saved)}>
+                        {saved.isDeleted ? "Herstel + open" : "Open"}
+                      </button>
+                    </div>
                   </div>
                 );
               })}

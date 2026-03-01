@@ -91,6 +91,21 @@ export async function deleteChart(chartId) {
     return { error }
 }
 
+export async function renameChart(chartId, newTitle) {
+    const userId = (await supabase.auth.getUser()).data.user?.id
+    if (!userId) throw new Error('User not authenticated')
+
+    const { data, error } = await supabase
+        .from('charts')
+        .update({ title: newTitle })
+        .eq('id', chartId)
+        .eq('user_id', userId)
+        .select()
+        .single()
+
+    return { data, error }
+}
+
 // ============================================
 // FOLDERS OPERATIONS
 // ============================================

@@ -491,20 +491,19 @@ function drawChartVectorInPDF({
     }
   }
 
-  // Draw F symbols on cells where a stitch "pops up" from the row below
-  // Use chart[gy - 1] to match the cell coloring logic (stitch at row N appears at row N+1)
+  // Draw F symbols where chart[gy][x] is true - same logic as the editor
   const symbolFontSize = Math.max(4, cellMm * 2.5);
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");
 
   for (let gy = startRow; gy < actualEndRow; gy++) {
-    if (gy === 0) continue; // First row has no pop-up stitches
     for (let gx = 0; gx < totalCols; gx++) {
       if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
-      if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
+      // F only where chart[gy][patternX] is true (same as editor)
+      if (!chart[gy] || !chart[gy][patternX]) continue;
       const cellX = offsetX + gx * cellMm + cellMm / 2;
       const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.7;
       doc.text("F", cellX, cellY, { align: "center" });
@@ -663,19 +662,19 @@ function buildPrintPageImage({
     }
   }
 
-  // Draw F symbols - use chart[gy - 1] to match cell coloring logic
+  // Draw F symbols where chart[gy][x] is true - same logic as the editor
   ctx.fillStyle = "#1a1a1a";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const symbolFontPx = Math.max(10, cellPx * 0.55);
   ctx.font = `bold ${symbolFontPx}px monospace`;
   for (let gy = startRow; gy < endRow; gy++) {
-    if (gy === 0) continue; // First row has no pop-up stitches
     for (let gx = startCol; gx < endCol; gx++) {
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
-      if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
+      // F only where chart[gy][patternX] is true (same as editor)
+      if (!chart[gy] || !chart[gy][patternX]) continue;
       const { x, y } = cellBounds(gx, gy);
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }

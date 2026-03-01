@@ -502,7 +502,9 @@ function drawChartVectorInPDF({
         if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
         const patternX = gx - xOffset;
         if (patternX < 0 || patternX >= w) continue;
-        if (!chart[gy] || !chart[gy][patternX]) continue;
+        // Skip first row (gy === 0) and check chart[gy - 1] to match cell coloring logic
+        if (gy === 0) continue;
+        if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
         const cellX = offsetX + gx * cellMm + cellMm / 2;
         const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
         doc.text("F", cellX, cellY, { align: "center" });
@@ -672,7 +674,9 @@ function buildPrintPageImage({
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
-      if (!chart[gy][patternX]) continue;
+      // Skip first row (gy === 0) and check chart[gy - 1] to match cell coloring logic
+      if (gy === 0) continue;
+      if (!chart[gy - 1] || !chart[gy - 1][patternX]) continue;
       const { x, y } = cellBounds(gx, gy);
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }

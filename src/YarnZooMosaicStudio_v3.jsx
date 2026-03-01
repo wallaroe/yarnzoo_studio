@@ -492,16 +492,26 @@ function drawChartVectorInPDF({
   }
 
   // Draw F symbols - matching editor logic EXACTLY (lines 1116-1125)
-  // Editor: for y 0..h, for x 0..w, if chart[y][x], draw at visualX=xOffset+x
   const symbolFontSize = Math.max(4, cellMm * 2.5);
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");
 
+  // Debug: count how many F symbols we should draw
+  let fCount = 0;
+  let totalCells = 0;
+  for (let y = startRow; y < actualEndRow; y++) {
+    for (let x = 0; x < w; x++) {
+      totalCells++;
+      if (chart[y] && chart[y][x]) fCount++;
+    }
+  }
+  console.log(`PDF F symbols: ${fCount} out of ${totalCells} cells (${(fCount/totalCells*100).toFixed(1)}%)`);
+  console.log(`Chart dimensions: ${w}x${h}, startRow=${startRow}, endRow=${actualEndRow}`);
+
   for (let y = startRow; y < actualEndRow; y++) {
     for (let x = 0; x < w; x++) {
       if (!chart[y] || !chart[y][x]) continue;
-      // Convert chart (x,y) to visual position, then to PDF coordinates
       const visualX = xOffset + x;
       const cellX = offsetX + visualX * cellMm + cellMm / 2;
       const cellY = offsetY + (y - startRow) * cellMm + cellMm * 0.7;

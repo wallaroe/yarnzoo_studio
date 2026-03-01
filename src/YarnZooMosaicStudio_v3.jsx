@@ -491,21 +491,20 @@ function drawChartVectorInPDF({
     }
   }
 
-  // Draw F symbols where chart[gy][x] is true - same logic as the editor
+  // Draw F symbols - matching editor logic EXACTLY (lines 1116-1125)
+  // Editor: for y 0..h, for x 0..w, if chart[y][x], draw at visualX=xOffset+x
   const symbolFontSize = Math.max(4, cellMm * 2.5);
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");
 
-  for (let gy = startRow; gy < actualEndRow; gy++) {
-    for (let gx = 0; gx < totalCols; gx++) {
-      if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
-      const patternX = gx - xOffset;
-      if (patternX < 0 || patternX >= w) continue;
-      // F only where chart[gy][patternX] is true (same as editor)
-      if (!chart[gy] || !chart[gy][patternX]) continue;
-      const cellX = offsetX + gx * cellMm + cellMm / 2;
-      const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.7;
+  for (let y = startRow; y < actualEndRow; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!chart[y] || !chart[y][x]) continue;
+      // Convert chart (x,y) to visual position, then to PDF coordinates
+      const visualX = xOffset + x;
+      const cellX = offsetX + visualX * cellMm + cellMm / 2;
+      const cellY = offsetY + (y - startRow) * cellMm + cellMm * 0.7;
       doc.text("F", cellX, cellY, { align: "center" });
     }
   }
@@ -662,21 +661,21 @@ function buildPrintPageImage({
     }
   }
 
-  // Draw F symbols where chart[gy][x] is true - same logic as the editor
+  // Draw F symbols - matching editor logic EXACTLY
   ctx.fillStyle = "#1a1a1a";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const symbolFontPx = Math.max(10, cellPx * 0.55);
   ctx.font = `bold ${symbolFontPx}px monospace`;
-  for (let gy = startRow; gy < endRow; gy++) {
-    for (let gx = startCol; gx < endCol; gx++) {
-      if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
-      const patternX = gx - xOffset;
-      if (patternX < 0 || patternX >= w) continue;
-      // F only where chart[gy][patternX] is true (same as editor)
-      if (!chart[gy] || !chart[gy][patternX]) continue;
-      const { x, y } = cellBounds(gx, gy);
-      ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
+  for (let y = startRow; y < endRow; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!chart[y] || !chart[y][x]) continue;
+      // Convert chart (x,y) to visual grid position
+      const visualX = xOffset + x;
+      // Only draw if within visible page area
+      if (visualX < startCol || visualX >= endCol) continue;
+      const { x: px, y: py } = cellBounds(visualX, y);
+      ctx.fillText("F", px + cellPx / 2, py + cellPx / 2);
     }
   }
 

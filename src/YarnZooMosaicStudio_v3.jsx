@@ -556,19 +556,17 @@ function drawChartVectorInPDF({
   }
 
   // Draw column numbers (top and bottom) - HORIZONTAL, scaled to fit cell width
-  // Font size is calculated so 3-digit numbers fit within the cell width WITH spacing
+  // Font size: 3-digit number must fit in cell width (divide by 3 for char width)
   if (showAllColumnNumbers) {
-    // Calculate font size: 3 chars + spacing must fit in cellMm width
-    // Using divisor of 2.5 instead of 1.8 to leave visible gaps between numbers
-    const colFontSizePt = Math.max(1.2, (cellMm / 2.5) * 2.83);
+    const colFontSizePt = Math.max(0.5, (cellMm / 3) * 2.83);
     doc.setFontSize(colFontSizePt);
     for (let gx = 0; gx < totalCols; gx++) {
       const colNum = config.direction === "RtoL" ? totalCols - gx : gx + 1;
       const cellX = offsetX + gx * cellMm + cellMm / 2;
       // Top - centered above column
-      doc.text(`${colNum}`, cellX, offsetY - 0.8, { align: "center" });
+      doc.text(`${colNum}`, cellX, offsetY - 0.5, { align: "center" });
       // Bottom - centered below column
-      doc.text(`${colNum}`, cellX, offsetY + chartH + colFontSizePt * 0.4, { align: "center" });
+      doc.text(`${colNum}`, cellX, offsetY + chartH + 0.5, { align: "center" });
     }
   }
 

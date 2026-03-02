@@ -492,7 +492,8 @@ function drawChartVectorInPDF({
   }
 
   // Draw F symbols - scale font with cell size (no minimum threshold)
-  const symbolFontSize = Math.max(0.4, cellMm * 0.55);
+  // Font should be ~55% of cell height, convert mm to points (1mm ≈ 2.83pt)
+  const symbolFontSize = Math.max(1.2, cellMm * 0.55 * 2.83);
   doc.setTextColor(30, 30, 30);
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");

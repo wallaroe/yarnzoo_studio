@@ -602,8 +602,9 @@ function buildPrintPageImage({
 
   const rowDigits = String(h).length;
   const colDigits = String(layout.totalCols).length;
-  const rowFontPx = Math.max(18, Math.min(48, cellPx * 0.85));
-  const colFontPx = Math.max(14, Math.min(40, cellPx * 0.75));
+  // Scale font with cell size - no minimum, so labels fit even on small cells
+  const rowFontPx = Math.max(2, Math.min(48, cellPx * 0.85));
+  const colFontPx = Math.max(2, Math.min(40, cellPx * 0.75));
   const marginLeft = Math.ceil(24 + rowDigits * (rowFontPx * 0.8));
   const marginRight = marginLeft;
   const marginTop = Math.ceil(20 + colFontPx * 1.8);

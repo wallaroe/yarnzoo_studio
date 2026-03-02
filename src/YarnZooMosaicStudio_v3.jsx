@@ -2848,95 +2848,67 @@ export default function App() {
       alert("Er is geen chart om te printen.");
       return;
     }
-    const rowCount = chart.length;
 
-    const pages = [];
+    const h = chart.length;
+    const w = chart[0].length;
+    const paperSize = resolvePaperSizeMm(printPaper, printOrientation);
+    const margin = Math.max(3, Number(printMarginMm) || 0);
+
+    // Create vector PDF using jsPDF
+    const doc = new jsPDF({
+      orientation: printOrientation === "portrait" ? "p" : "l",
+      unit: "mm",
+      format: printPaper.toLowerCase(),
+    });
+
+    const pw = paperSize.w;
+    const ph = paperSize.h;
+    const contentW = pw - margin * 2;
+    const contentH = ph - margin * 2;
+
+    let pageNum = 0;
+
+    // Generate pages
     for (let py = 0; py < printLayout.pagesY; py++) {
       for (let px = 0; px < printLayout.pagesX; px++) {
-        pages.push(buildPrintPageImage({
+        if (pageNum > 0) doc.addPage();
+        pageNum++;
+
+        const startRow = py * printLayout.rowsPerPage;
+        const endRow = Math.min(h, startRow + printLayout.rowsPerPage);
+        const startCol = px * printLayout.colsPerPage;
+        const endCol = Math.min(printLayout.totalCols, startCol + printLayout.colsPerPage);
+
+        // Page header
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.text(
+          `${chartTitle || "Chart"} · Pagina ${pageNum} · kolommen ${startCol + 1}-${endCol} · rijen ${h - endRow + 1}-${h - startRow}`,
+          margin,
+          margin - 2
+        );
+
+        // Draw chart using vector graphics
+        drawChartVectorInPDF({
+          doc,
           chart,
           colA,
           colB,
           config: projConfig,
-          layout: printLayout,
-          pageX: px,
-          pageY: py,
-        }));
+          startX: margin,
+          startY: margin + 2,
+          availableWidth: contentW,
+          availableHeight: contentH - 4,
+          startRow,
+          endRow,
+          showAllColumnNumbers: true,
+        });
       }
     }
 
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("Popup geblokkeerd. Sta popups toe om print preview te openen.");
-      return;
-    }
-
-    const sizeText = `${printPaper} ${printOrientation === "portrait" ? "staand" : "liggend"}`;
-    const pageCssSize = `${printPaper} ${printOrientation === "portrait" ? "portrait" : "landscape"}`;
-    const doc = win.document;
-    doc.open();
-    doc.write(`<!doctype html><html><head><meta charset="utf-8" /><title>Print chart - ${chartTitle || "YarnZoo"}</title></head><body><div id="print-root"></div></body></html>`);
-    doc.close();
-
-    const style = doc.createElement("style");
-    style.textContent = `
-      @page { size: ${pageCssSize}; margin: ${Math.max(3, Number(printMarginMm) || 0)}mm; }
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 12px; font-family: Arial, sans-serif; background: #f6f6f6; color: #222; }
-      .toolbar { position: sticky; top: 0; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; z-index: 1; }
-      .meta { font-size: 12px; color: #555; }
-      .print-btn { border: 1px solid #222; border-radius: 6px; background: #fff; padding: 8px 12px; cursor: pointer; font-weight: 700; }
-      .page { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px; margin: 0 auto 12px; display: inline-block; page-break-after: always; }
-      .page:last-child { page-break-after: auto; }
-      .label { font-size: 11px; margin-bottom: 6px; color: #666; }
-      img { display: block; max-width: 100%; height: auto; }
-      @media print {
-        body { background: #fff; padding: 0; }
-        .toolbar { display: none; }
-        .page { border: none; border-radius: 0; padding: 0; margin: 0; display: block; }
-        .label { display: none; }
-      }
-    `;
-    doc.head.appendChild(style);
-
-    const root = doc.getElementById("print-root");
-    if (!root) return;
-
-    const toolbar = doc.createElement("div");
-    toolbar.className = "toolbar";
-
-    const meta = doc.createElement("div");
-    meta.className = "meta";
-    meta.innerHTML = `<strong>${chartTitle || "Naamloze chart"}</strong><br/>${sizeText} · ${pages.length} pagina${pages.length === 1 ? "" : "'s"} · cel ${printLayout.cellMm.toFixed(2)} mm`;
-
-    const printBtn = doc.createElement("button");
-    printBtn.className = "print-btn";
-    printBtn.textContent = "Print / Opslaan als PDF";
-    printBtn.onclick = () => win.print();
-
-    toolbar.appendChild(meta);
-    toolbar.appendChild(printBtn);
-    root.appendChild(toolbar);
-
-    for (let idx = 0; idx < pages.length; idx++) {
-      const p = pages[idx];
-      const section = doc.createElement("section");
-      section.className = "page";
-
-      const label = doc.createElement("div");
-      label.className = "label";
-      label.textContent = `Pagina ${idx + 1} · kolommen ${p.startCol + 1}-${p.endCol} · rijen ${rowCount - p.endRow + 1}-${rowCount - p.startRow}`;
-
-      const img = doc.createElement("img");
-      img.alt = `Chart pagina ${idx + 1}`;
-      img.src = p.dataUrl;
-
-      section.appendChild(label);
-      section.appendChild(img);
-      root.appendChild(section);
-    }
-
-    win.focus();
+    // Save the PDF
+    const filename = `${chartTitle || "chart"}_print.pdf`;
+    doc.save(filename);
   };
 
   return (

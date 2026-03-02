@@ -491,22 +491,20 @@ function drawChartVectorInPDF({
     }
   }
 
-  // Draw F symbols - only if cells are large enough
-  if (cellMm >= 0.8) {
-    doc.setTextColor(30, 30, 30);
-    const symbolFontSize = Math.max(1.5, cellMm * 0.6);
-    doc.setFontSize(symbolFontSize);
-    doc.setFont("helvetica", "bold");
-    for (let gy = startRow; gy < actualEndRow; gy++) {
-      for (let gx = 0; gx < totalCols; gx++) {
-        if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
-        const patternX = gx - xOffset;
-        if (patternX < 0 || patternX >= w) continue;
-        if (!chart[gy] || !chart[gy][patternX]) continue;
-        const cellX = offsetX + gx * cellMm + cellMm / 2;
-        const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
-        doc.text("F", cellX, cellY, { align: "center" });
-      }
+  // Draw F symbols - scale font with cell size (no minimum threshold)
+  const symbolFontSize = Math.max(0.4, cellMm * 0.55);
+  doc.setTextColor(30, 30, 30);
+  doc.setFontSize(symbolFontSize);
+  doc.setFont("helvetica", "bold");
+  for (let gy = startRow; gy < actualEndRow; gy++) {
+    for (let gx = 0; gx < totalCols; gx++) {
+      if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
+      const patternX = gx - xOffset;
+      if (patternX < 0 || patternX >= w) continue;
+      if (!chart[gy] || !chart[gy][patternX]) continue;
+      const cellX = offsetX + gx * cellMm + cellMm / 2;
+      const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
+      doc.text("F", cellX, cellY, { align: "center" });
     }
   }
 
@@ -667,30 +665,16 @@ function buildPrintPageImage({
   ctx.textBaseline = "middle";
   const symbolFontPx = Math.max(10, cellPx * 0.55);
   ctx.font = `bold ${symbolFontPx}px monospace`;
-
-  // DEBUG: Count F symbols
-  let fCount = 0;
-  let totalCells = 0;
-  let chartTrueCount = 0;
-  for (let cy = 0; cy < h; cy++) {
-    for (let cx = 0; cx < w; cx++) {
-      if (chart[cy] && chart[cy][cx]) chartTrueCount++;
-    }
-  }
-
   for (let gy = startRow; gy < endRow; gy++) {
     for (let gx = startCol; gx < endCol; gx++) {
-      totalCells++;
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
       if (!chart[gy] || !chart[gy][patternX]) continue;
-      fCount++;
       const { x, y } = cellBounds(gx, gy);
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }
   }
-  alert(`DEBUG: chartSize=${h}x${w}, chartTrue=${chartTrueCount}, fDrawn=${fCount}/${totalCells}, cellPx=${cellPx.toFixed(1)}, fontPx=${symbolFontPx.toFixed(1)}`);
 
   ctx.strokeStyle = "rgba(0,0,0,0.18)";
   ctx.lineWidth = Math.max(0.6, cellPx * 0.03);

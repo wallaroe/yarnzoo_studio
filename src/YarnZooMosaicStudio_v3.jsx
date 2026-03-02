@@ -667,16 +667,30 @@ function buildPrintPageImage({
   ctx.textBaseline = "middle";
   const symbolFontPx = Math.max(10, cellPx * 0.55);
   ctx.font = `bold ${symbolFontPx}px monospace`;
+
+  // DEBUG: Count F symbols
+  let fCount = 0;
+  let totalCells = 0;
+  let chartTrueCount = 0;
+  for (let cy = 0; cy < h; cy++) {
+    for (let cx = 0; cx < w; cx++) {
+      if (chart[cy] && chart[cy][cx]) chartTrueCount++;
+    }
+  }
+
   for (let gy = startRow; gy < endRow; gy++) {
     for (let gx = startCol; gx < endCol; gx++) {
+      totalCells++;
       if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
-      if (!chart[gy][patternX]) continue;
+      if (!chart[gy] || !chart[gy][patternX]) continue;
+      fCount++;
       const { x, y } = cellBounds(gx, gy);
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }
   }
+  console.log(`DEBUG buildPrintPageImage: chartSize=${h}x${w}, chartTrueCount=${chartTrueCount}, page fCount=${fCount}/${totalCells}, cellPx=${cellPx.toFixed(1)}, fontPx=${symbolFontPx.toFixed(1)}`);
 
   ctx.strokeStyle = "rgba(0,0,0,0.18)";
   ctx.lineWidth = Math.max(0.6, cellPx * 0.03);

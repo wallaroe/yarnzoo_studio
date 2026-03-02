@@ -690,7 +690,7 @@ function buildPrintPageImage({
       ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
     }
   }
-  console.log(`DEBUG buildPrintPageImage: chartSize=${h}x${w}, chartTrueCount=${chartTrueCount}, page fCount=${fCount}/${totalCells}, cellPx=${cellPx.toFixed(1)}, fontPx=${symbolFontPx.toFixed(1)}`);
+  alert(`DEBUG: chartSize=${h}x${w}, chartTrue=${chartTrueCount}, fDrawn=${fCount}/${totalCells}, cellPx=${cellPx.toFixed(1)}, fontPx=${symbolFontPx.toFixed(1)}`);
 
   ctx.strokeStyle = "rgba(0,0,0,0.18)";
   ctx.lineWidth = Math.max(0.6, cellPx * 0.03);

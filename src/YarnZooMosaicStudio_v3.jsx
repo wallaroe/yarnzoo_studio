@@ -599,14 +599,13 @@ function buildPrintPageImage({
   const cellPx = Math.max(4, layout.cellMm * pxPerMm);
 
   const rowDigits = String(h).length;
-  const colDigits = String(layout.totalCols).length;
   // Scale font with cell size - no minimum, so labels fit even on small cells
   const rowFontPx = Math.max(2, Math.min(48, cellPx * 0.85));
-  const colFontPx = Math.max(2, Math.min(40, cellPx * 0.75));
+  const colFontPx = Math.max(2, cellPx / 3); // 3 digits must fit in cell width
   const marginLeft = Math.ceil(24 + rowDigits * (rowFontPx * 0.8));
   const marginRight = marginLeft;
-  const marginTop = Math.ceil(20 + colFontPx * 1.8);
-  const marginBottom = Math.ceil(24 + colFontPx * 2.0);
+  const marginTop = Math.ceil(16 + colFontPx * 2);
+  const marginBottom = Math.ceil(16 + colFontPx * 2);
 
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(visibleCols * cellPx + marginLeft + marginRight);
@@ -762,29 +761,20 @@ function buildPrintPageImage({
     ctx.fillText(`${rowNum}`, visibleCols * cellPx + rowLabelOffset, y);
   }
 
-  // Column numbers - rotated 90 degrees to fit without overlap
+  // Column numbers - horizontal, scaled to fit 3-digit numbers in cell width
   ctx.fillStyle = "#444";
-  ctx.font = `bold ${colFontPx}px monospace`;
-  const colLabelOffset = Math.max(6, colFontPx * 0.3);
+  const colNumFontPx = Math.max(2, cellPx / 3); // 3 digits must fit in cell width
+  ctx.font = `bold ${colNumFontPx}px monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const colLabelOffset = Math.max(4, colNumFontPx * 0.6);
   for (let gx = startCol; gx < endCol; gx++) {
     const colNum = config.direction === "RtoL" ? layout.totalCols - gx : gx + 1;
     const x = (gx - startCol) * cellPx + cellPx / 2;
-    // Bottom labels - rotated 90 degrees
-    ctx.save();
-    ctx.translate(x, visibleRows * cellPx + colLabelOffset);
-    ctx.rotate(Math.PI / 2);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${colNum}`, 0, 0);
-    ctx.restore();
-    // Top labels - rotated -90 degrees
-    ctx.save();
-    ctx.translate(x, -colLabelOffset);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`${colNum}`, 0, 0);
-    ctx.restore();
+    // Top labels
+    ctx.fillText(`${colNum}`, x, -colLabelOffset);
+    // Bottom labels
+    ctx.fillText(`${colNum}`, x, visibleRows * cellPx + colLabelOffset);
   }
 
   return {

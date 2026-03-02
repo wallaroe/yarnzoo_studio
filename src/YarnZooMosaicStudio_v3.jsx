@@ -426,24 +426,30 @@ function drawChartVectorInPDF({
   availableHeight,
   startRow = 0,
   endRow = null,
+  startCol = 0,
+  endCol = null,
   showAllColumnNumbers = true, // false = only show every 10th column number
 }) {
   const w = chart[0].length;
   const h = chart.length;
-  const actualEndRow = endRow !== null ? endRow : h;
-  const visibleRows = actualEndRow - startRow;
   const xOffset = config.showEdges ? 1 : 0;
-  const totalCols = w + (config.showEdges ? 2 : 0);
+  const totalColsAll = w + (config.showEdges ? 2 : 0);
+
+  // Row/col ranges
+  const actualEndRow = endRow !== null ? endRow : h;
+  const actualEndCol = endCol !== null ? endCol : totalColsAll;
+  const visibleRows = actualEndRow - startRow;
+  const visibleCols = actualEndCol - startCol;
 
   // Calculate cell size to fit in available space with proper margins for labels
   const rowLabelWidth = 10; // mm for row numbers on each side
   const colLabelHeight = 5; // mm for column numbers top/bottom (small horizontal text)
   const chartAreaW = availableWidth - rowLabelWidth * 2;
   const chartAreaH = availableHeight - colLabelHeight * 2;
-  const cellMm = Math.min(chartAreaW / totalCols, chartAreaH / visibleRows);
+  const cellMm = Math.min(chartAreaW / visibleCols, chartAreaH / visibleRows);
 
   // Actual chart dimensions
-  const chartW = totalCols * cellMm;
+  const chartW = visibleCols * cellMm;
   const chartH = visibleRows * cellMm;
 
   // Center the chart
@@ -465,13 +471,13 @@ function drawChartVectorInPDF({
 
   // Draw cells
   for (let gy = startRow; gy < actualEndRow; gy++) {
-    for (let gx = 0; gx < totalCols; gx++) {
-      const cellX = offsetX + gx * cellMm;
+    for (let gx = startCol; gx < actualEndCol; gx++) {
+      const cellX = offsetX + (gx - startCol) * cellMm;
       const cellY = offsetY + (gy - startRow) * cellMm;
 
       // Determine cell color
       let cellHex = getRowHex(gy);
-      if (!config.showEdges || (gx !== 0 && gx !== totalCols - 1)) {
+      if (!config.showEdges || (gx !== 0 && gx !== totalColsAll - 1)) {
         if (gx >= xOffset && gx < xOffset + w && gy > 0) {
           const patternX = gx - xOffset;
           if (chart[gy - 1] && chart[gy - 1][patternX]) {
@@ -484,7 +490,7 @@ function drawChartVectorInPDF({
       doc.rect(cellX, cellY, cellMm, cellMm, "F");
 
       // Draw edge stitch indicator (small white dot)
-      if (config.showEdges && (gx === 0 || gx === totalCols - 1)) {
+      if (config.showEdges && (gx === 0 || gx === totalColsAll - 1)) {
         doc.setFillColor(255, 255, 255);
         doc.circle(cellX + cellMm / 2, cellY + cellMm / 2, cellMm * 0.12, "F");
       }
@@ -498,12 +504,12 @@ function drawChartVectorInPDF({
   doc.setFontSize(symbolFontSize);
   doc.setFont("helvetica", "bold");
   for (let gy = startRow; gy < actualEndRow; gy++) {
-    for (let gx = 0; gx < totalCols; gx++) {
-      if (config.showEdges && (gx === 0 || gx === totalCols - 1)) continue;
+    for (let gx = startCol; gx < actualEndCol; gx++) {
+      if (config.showEdges && (gx === 0 || gx === totalColsAll - 1)) continue;
       const patternX = gx - xOffset;
       if (patternX < 0 || patternX >= w) continue;
       if (!chart[gy] || !chart[gy][patternX]) continue;
-      const cellX = offsetX + gx * cellMm + cellMm / 2;
+      const cellX = offsetX + (gx - startCol) * cellMm + cellMm / 2;
       const cellY = offsetY + (gy - startRow) * cellMm + cellMm * 0.65;
       doc.text("F", cellX, cellY, { align: "center" });
     }
@@ -513,7 +519,7 @@ function drawChartVectorInPDF({
   doc.setDrawColor(100, 100, 100);
   doc.setLineWidth(0.05);
   // Vertical lines
-  for (let x = 0; x <= totalCols; x++) {
+  for (let x = 0; x <= visibleCols; x++) {
     const px = offsetX + x * cellMm;
     doc.line(px, offsetY, px, offsetY + chartH);
   }
@@ -526,9 +532,10 @@ function drawChartVectorInPDF({
   // Thicker lines every 10 rows/cols
   doc.setDrawColor(50, 50, 50);
   doc.setLineWidth(0.15);
-  for (let x = 0; x <= totalCols; x++) {
-    const colNum = config.direction === "RtoL" ? totalCols - x : x + 1;
-    if (colNum % 10 === 0 || x === 0 || x === totalCols) {
+  for (let x = 0; x <= visibleCols; x++) {
+    const gx = startCol + x;
+    const colNum = config.direction === "RtoL" ? totalColsAll - gx : gx + 1;
+    if (colNum % 10 === 0 || x === 0 || x === visibleCols) {
       const px = offsetX + x * cellMm;
       doc.line(px, offsetY, px, offsetY + chartH);
     }
@@ -560,9 +567,9 @@ function drawChartVectorInPDF({
   if (showAllColumnNumbers) {
     const colFontSizePt = Math.max(0.5, (cellMm / 3) * 2.83);
     doc.setFontSize(colFontSizePt);
-    for (let gx = 0; gx < totalCols; gx++) {
-      const colNum = config.direction === "RtoL" ? totalCols - gx : gx + 1;
-      const cellX = offsetX + gx * cellMm + cellMm / 2;
+    for (let gx = startCol; gx < actualEndCol; gx++) {
+      const colNum = config.direction === "RtoL" ? totalColsAll - gx : gx + 1;
+      const cellX = offsetX + (gx - startCol) * cellMm + cellMm / 2;
       // Top - centered above column
       doc.text(`${colNum}`, cellX, offsetY - 0.5, { align: "center" });
       // Bottom - centered below column
@@ -570,7 +577,7 @@ function drawChartVectorInPDF({
     }
   }
 
-  return { chartW, chartH, cellMm, offsetX, offsetY };
+  return { chartW, chartH, cellMm, offsetX, offsetY, visibleCols, visibleRows };
 }
 
 function buildPrintPageImage({
@@ -2901,6 +2908,8 @@ export default function App() {
           availableHeight: contentH - 4,
           startRow,
           endRow,
+          startCol,
+          endCol,
           showAllColumnNumbers: true,
         });
       }

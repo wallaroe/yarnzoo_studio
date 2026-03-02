@@ -661,19 +661,23 @@ function buildPrintPageImage({
     }
   }
 
-  ctx.fillStyle = "#1a1a1a";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  const symbolFontPx = Math.max(10, cellPx * 0.55);
-  ctx.font = `bold ${symbolFontPx}px monospace`;
-  for (let gy = startRow; gy < endRow; gy++) {
-    for (let gx = startCol; gx < endCol; gx++) {
-      if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
-      const patternX = gx - xOffset;
-      if (patternX < 0 || patternX >= w) continue;
-      if (!chart[gy] || !chart[gy][patternX]) continue;
-      const { x, y } = cellBounds(gx, gy);
-      ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
+  // Draw F symbols - scale font with cell size (55% of cell, min 2px)
+  const symbolFontPx = Math.max(2, cellPx * 0.55);
+  // Only draw if font would be readable (at least 2px)
+  if (symbolFontPx >= 2) {
+    ctx.fillStyle = "#1a1a1a";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = `bold ${symbolFontPx}px monospace`;
+    for (let gy = startRow; gy < endRow; gy++) {
+      for (let gx = startCol; gx < endCol; gx++) {
+        if (config.showEdges && (gx === 0 || gx === layout.totalCols - 1)) continue;
+        const patternX = gx - xOffset;
+        if (patternX < 0 || patternX >= w) continue;
+        if (!chart[gy] || !chart[gy][patternX]) continue;
+        const { x, y } = cellBounds(gx, gy);
+        ctx.fillText("F", x + cellPx / 2, y + cellPx / 2);
+      }
     }
   }
 

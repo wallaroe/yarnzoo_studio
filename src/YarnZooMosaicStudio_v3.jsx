@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
+import { saveChart as saveChartToCloud } from "./lib/database";
 import jsPDF from "jspdf";
 
 // ============================================================
@@ -1405,6 +1406,7 @@ export default function App() {
   const [remoteLoaded, setRemoteLoaded] = useState(!hasSupabaseConfig);
   const [isHydratingRemote, setIsHydratingRemote] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState(hasSupabaseConfig ? "guest" : "local");
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 1024 : false));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ruleNotice, setRuleNotice] = useState("");
@@ -1937,7 +1939,7 @@ export default function App() {
     setShowSaveModal(true);
   };
 
-  const confirmSaveChart = () => {
+  const confirmSaveChart = async () => {
     if (!saveDraftTitle.trim()) {
       alert("Geef je patroon een naam.");
       return;
@@ -1954,7 +1956,106 @@ export default function App() {
     upsertSavedChart(record);
     setCurrentChartId(record.id);
     setShowSaveModal(false);
-    alert("Chart opgeslagen.");
+
+    // Save to cloud if user is authenticated
+    if (hasSupabaseConfig && user) {
+      try {
+        const { data, error } = await saveChartToCloud({
+          title: record.title,
+          description: '',
+          chartData: record.chart,
+          gridWidth: record.gridW,
+          gridHeight: record.gridH,
+          colorA: record.colA,
+          colorB: record.colB,
+          config: {
+            threshold: record.threshold,
+            projConfig: record.projConfig,
+            cellSize: record.cellSize,
+            thresholdRegions: record.thresholdRegions,
+          },
+          isPublic: false,
+          chartId: record.cloudId || null, // Use existing cloud ID if updating
+        });
+        if (error) {
+          console.error("Cloud save error:", error);
+          alert("Lokaal opgeslagen. Cloud opslag mislukt: " + error.message);
+        } else {
+          // Store the cloud ID for future updates
+          if (data?.id && !record.cloudId) {
+            upsertSavedChart({ ...record, cloudId: data.id });
+          }
+          alert("Chart opgeslagen (lokaal + cloud).");
+        }
+      } catch (err) {
+        console.error("Cloud save exception:", err);
+        alert("Lokaal opgeslagen. Cloud opslag mislukt.");
+      }
+    } else {
+      alert("Chart opgeslagen.");
+    }
+  };
+
+  const syncAllChartsToCloud = async () => {
+    if (!hasSupabaseConfig || !user) {
+      alert("Log eerst in om te synchroniseren naar de cloud.");
+      return;
+    }
+
+    const chartsToSync = savedCharts.filter(c => !c.cloudId && !c.isDeleted);
+    if (chartsToSync.length === 0) {
+      alert("Alle charts zijn al gesynchroniseerd naar de cloud.");
+      return;
+    }
+
+    const confirmSync = window.confirm(
+      `${chartsToSync.length} chart(s) worden naar de cloud geüpload. Doorgaan?`
+    );
+    if (!confirmSync) return;
+
+    setIsSyncingAll(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const chart of chartsToSync) {
+      try {
+        const { data, error } = await saveChartToCloud({
+          title: chart.title || "Naamloos",
+          description: '',
+          chartData: chart.chart,
+          gridWidth: chart.gridW,
+          gridHeight: chart.gridH,
+          colorA: chart.colA,
+          colorB: chart.colB,
+          config: {
+            threshold: chart.threshold,
+            projConfig: chart.projConfig,
+            cellSize: chart.cellSize,
+            thresholdRegions: chart.thresholdRegions,
+          },
+          isPublic: false,
+        });
+
+        if (error) {
+          console.error(`Cloud sync error for ${chart.title}:`, error);
+          failCount++;
+        } else if (data?.id) {
+          upsertSavedChart({ ...chart, cloudId: data.id });
+          successCount++;
+        }
+      } catch (err) {
+        console.error(`Cloud sync exception for ${chart.title}:`, err);
+        failCount++;
+      }
+    }
+
+    setIsSyncingAll(false);
+
+    if (failCount === 0) {
+      alert(`${successCount} chart(s) succesvol gesynchroniseerd naar de cloud.`);
+    } else {
+      alert(`Sync voltooid: ${successCount} gelukt, ${failCount} mislukt.`);
+    }
   };
 
   const newChart = () => {
@@ -2504,6 +2605,22 @@ export default function App() {
             >
               <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name={user ? "logout" : "login"} /></span>
               <span>{user ? "Uitloggen" : "Inloggen"}</span>
+            </button>
+          )}
+          {hasSupabaseConfig && user && (
+            <button
+              style={{
+                ...btnSidebar,
+                borderColor: isSyncingAll ? B.border : "#4a9",
+                color: isSyncingAll ? B.dark : "#2a7",
+                opacity: isSyncingAll ? 0.6 : 1,
+                cursor: isSyncingAll ? "not-allowed" : "pointer",
+              }}
+              onClick={() => { syncAllChartsToCloud(); if (isMobile) setSidebarOpen(false); }}
+              disabled={isSyncingAll}
+            >
+              <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="cloud" /></span>
+              <span>{isSyncingAll ? "Synchroniseren..." : "Sync naar cloud"}</span>
             </button>
           )}
           <button style={{ ...btnSidebar, borderColor: "#d55", color: "#a11" }} onClick={() => { deleteCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
@@ -4442,6 +4559,14 @@ function MenuIcon({ name }) {
         <path d="M9 7V5h6v2" />
         <path d="M7 7l1 13h8l1-13" />
         <path d="M10 11v6M14 11v6" />
+      </svg>
+    );
+  }
+  if (name === "cloud") {
+    return (
+      <svg {...base}>
+        <path d="M18 10a4 4 0 0 0-8 0 3 3 0 0 0 0 6h9a3 3 0 1 0-1-6z" />
+        <path d="M12 13v5M10 16l2 2 2-2" />
       </svg>
     );
   }

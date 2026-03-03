@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
-import { saveChart as saveChartToCloud } from "./lib/database";
+import { saveChart as saveChartToCloud, loadUserCharts } from "./lib/database";
 import jsPDF from "jspdf";
 
 // ============================================================
@@ -1820,63 +1820,99 @@ export default function App() {
     }
 
     let active = true;
-    const loadRemoteWorkspace = async () => {
+    const mergeChartsFromCloud = async () => {
       setIsHydratingRemote(true);
       setCloudSyncState("syncing");
-      const { data, error } = await supabase
-        .from("workspaces")
-        .select("data")
-        .eq("user_id", user.id)
-        .maybeSingle();
 
-      if (!active) return;
-      if (error) {
-        setCloudSyncState(error.code === "42P01" ? "setup_needed" : "cloud_error");
-      } else {
-        const remoteFolders = Array.isArray(data?.data?.folders) ? data.data.folders : null;
-        const remoteCharts = Array.isArray(data?.data?.charts) ? data.data.charts : null;
-        if (remoteFolders && remoteCharts) {
-          const folderIds = new Set(remoteFolders.map(f => f.id));
-          const normalizedFolders = [...remoteFolders];
-          for (const f of DEFAULT_FOLDERS) {
-            if (!folderIds.has(f.id)) normalizedFolders.push(f);
-          }
-          setFolders(normalizedFolders);
-          setSavedCharts(remoteCharts);
+      try {
+        // Fetch charts from cloud (charts table)
+        const { data: cloudCharts, error } = await loadUserCharts();
+
+        if (!active) return;
+
+        if (error) {
+          console.error("Error loading cloud charts:", error);
+          setCloudSyncState("cloud_error");
+        } else if (cloudCharts && cloudCharts.length > 0) {
+          // Merge local and cloud charts
+          setSavedCharts(prevLocal => {
+            const localByCloudId = new Map(prevLocal.filter(c => c.cloudId).map(c => [c.cloudId, c]));
+            const merged = [...prevLocal];
+            let addedCount = 0;
+
+            for (const cloudChart of cloudCharts) {
+              // Check if we already have this chart locally (by cloudId)
+              if (localByCloudId.has(cloudChart.id)) {
+                // Already have it, update cloudId reference if needed
+                continue;
+              }
+
+              // Check if there's a local chart with matching title and similar data (might be same chart)
+              const existingByTitle = prevLocal.find(c =>
+                !c.cloudId &&
+                c.title === cloudChart.title &&
+                c.gridW === cloudChart.grid_width &&
+                c.gridH === cloudChart.grid_height
+              );
+
+              if (existingByTitle) {
+                // Link existing local chart to cloud
+                const idx = merged.findIndex(c => c.id === existingByTitle.id);
+                if (idx !== -1) {
+                  merged[idx] = { ...merged[idx], cloudId: cloudChart.id };
+                }
+                continue;
+              }
+
+              // This is a new chart from cloud - add it locally
+              const localRecord = {
+                id: `chart-cloud-${cloudChart.id}`,
+                cloudId: cloudChart.id,
+                title: cloudChart.title || "Cloud chart",
+                folderId: DEFAULT_FOLDER_ID,
+                isDeleted: false,
+                deletedAt: null,
+                createdAt: cloudChart.created_at,
+                updatedAt: cloudChart.updated_at,
+                gridW: cloudChart.grid_width,
+                gridH: cloudChart.grid_height,
+                chart: cloudChart.chart_data,
+                colA: cloudChart.color_a || { name: "Zandvoort", hex: "#E8DCC8" },
+                colB: cloudChart.color_b || { name: "Arnhem", hex: "#C75050" },
+                threshold: cloudChart.config?.threshold || 128,
+                projConfig: cloudChart.config?.projConfig || { direction: "RtoL", showEdges: true },
+                cellSize: cloudChart.config?.cellSize || 4,
+                thresholdRegions: cloudChart.config?.thresholdRegions || [],
+              };
+              merged.push(localRecord);
+              addedCount++;
+            }
+
+            if (addedCount > 0) {
+              console.log(`Merged ${addedCount} chart(s) from cloud`);
+            }
+            return merged;
+          });
+          setCloudSyncState("cloud");
+        } else {
+          setCloudSyncState("cloud");
         }
-        setCloudSyncState("cloud");
+      } catch (err) {
+        console.error("Error merging cloud charts:", err);
+        setCloudSyncState("cloud_error");
       }
+
       setRemoteLoaded(true);
       setIsHydratingRemote(false);
     };
 
-    loadRemoteWorkspace();
+    mergeChartsFromCloud();
     return () => { active = false; };
   }, [user, authReady]);
 
   useEffect(() => {
     saveWorkspace(folders, savedCharts);
   }, [folders, savedCharts]);
-
-  useEffect(() => {
-    if (!hasSupabaseConfig || !supabase || !user || !remoteLoaded || isHydratingRemote || !authReady) return;
-    const timer = setTimeout(async () => {
-      setCloudSyncState("syncing");
-      const { error } = await supabase
-        .from("workspaces")
-        .upsert({
-          user_id: user.id,
-          data: { folders, charts: savedCharts },
-          updated_at: new Date().toISOString(),
-        });
-      if (error) {
-        setCloudSyncState(error.code === "42P01" ? "setup_needed" : "cloud_error");
-      } else {
-        setCloudSyncState("cloud");
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [folders, savedCharts, user, remoteLoaded, isHydratingRemote, authReady]);
 
   // Auto-sync charts to cloud when user logs in
   useEffect(() => {

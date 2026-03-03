@@ -11,6 +11,22 @@ const B = {
     white: "#FFFFFF",
 }
 
+const formatChartLastSaved = (updatedAt, createdAt) => {
+    const timestamp = updatedAt || createdAt
+    if (!timestamp) return 'Onbekend'
+
+    const date = new Date(timestamp)
+    if (Number.isNaN(date.getTime())) return 'Onbekend'
+
+    return new Intl.DateTimeFormat('nl-NL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(date)
+}
+
 export default function LibraryModal({ onClose, onLoadChart }) {
     const { user } = useAuth()
     const [charts, setCharts] = useState([])
@@ -69,7 +85,7 @@ export default function LibraryModal({ onClose, onLoadChart }) {
 
         const { data, error } = await renameChart(chartId, editTitle.trim())
         if (!error && data) {
-            setCharts(charts.map(c => c.id === chartId ? { ...c, title: data.title } : c))
+            setCharts(charts.map(c => c.id === chartId ? { ...c, ...data } : c))
         }
         cancelEditing()
     }
@@ -131,7 +147,10 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                     </div>
                                 ) : (
                                     <div style={gridStyle}>
-                                        {charts.map(chart => (
+                                        {charts.map(chart => {
+                                            const lastSaved = formatChartLastSaved(chart.updated_at, chart.created_at)
+
+                                            return (
                                             <div key={chart.id} style={chartCardStyle}>
                                                 <div style={chartHeaderStyle}>
                                                     {editingChartId === chart.id ? (
@@ -161,8 +180,9 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                                     <div style={chartDescStyle}>{chart.description}</div>
                                                 )}
                                                 <div style={chartMetaStyle}>
-                                                    📐 {chart.grid_width} × {chart.grid_height} |
-                                                    🎨 {chart.color_a.name} & {chart.color_b.name}
+                                                    <div>📐 {chart.grid_width} × {chart.grid_height}</div>
+                                                    <div>🎨 {chart.color_a.name} & {chart.color_b.name}</div>
+                                                    <div>🕒 Laatst opgeslagen: {lastSaved}</div>
                                                 </div>
                                                 <div style={chartActionsStyle}>
                                                     <button
@@ -186,7 +206,8 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                                     </button>
                                                 </div>
                                             </div>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -382,6 +403,10 @@ const chartDescStyle = {
 const chartMetaStyle = {
     fontSize: '11px',
     color: '#999',
+    lineHeight: 1.5,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
 }
 
 const chartActionsStyle = {

@@ -1407,6 +1407,7 @@ export default function App() {
   const [isHydratingRemote, setIsHydratingRemote] = useState(false);
   const [cloudSyncState, setCloudSyncState] = useState(hasSupabaseConfig ? "guest" : "local");
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [hasAutoSynced, setHasAutoSynced] = useState(false);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth < 1024 : false));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [ruleNotice, setRuleNotice] = useState("");
@@ -1876,6 +1877,63 @@ export default function App() {
     }, 400);
     return () => clearTimeout(timer);
   }, [folders, savedCharts, user, remoteLoaded, isHydratingRemote, authReady]);
+
+  // Auto-sync charts to cloud when user logs in
+  useEffect(() => {
+    if (!hasSupabaseConfig || !user || !remoteLoaded || isHydratingRemote || hasAutoSynced || isSyncingAll) return;
+
+    const chartsToSync = savedCharts.filter(c => !c.cloudId && !c.isDeleted);
+    if (chartsToSync.length === 0) {
+      setHasAutoSynced(true);
+      return;
+    }
+
+    const autoSync = async () => {
+      setIsSyncingAll(true);
+      let successCount = 0;
+
+      for (const chart of chartsToSync) {
+        try {
+          const { data, error } = await saveChartToCloud({
+            title: chart.title || "Naamloos",
+            description: '',
+            chartData: chart.chart,
+            gridWidth: chart.gridW,
+            gridHeight: chart.gridH,
+            colorA: chart.colA,
+            colorB: chart.colB,
+            config: {
+              threshold: chart.threshold,
+              projConfig: chart.projConfig,
+              cellSize: chart.cellSize,
+              thresholdRegions: chart.thresholdRegions,
+            },
+            isPublic: false,
+          });
+
+          if (!error && data?.id) {
+            setSavedCharts(prev => prev.map(c =>
+              c.id === chart.id ? { ...c, cloudId: data.id } : c
+            ));
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Auto-sync error for ${chart.title}:`, err);
+        }
+      }
+
+      setIsSyncingAll(false);
+      setHasAutoSynced(true);
+
+      if (successCount > 0) {
+        console.log(`Auto-synced ${successCount} chart(s) to cloud`);
+      }
+    };
+
+    // Small delay to ensure workspace is fully loaded
+    const timer = setTimeout(autoSync, 1000);
+    return () => clearTimeout(timer);
+  }, [user, remoteLoaded, isHydratingRemote, hasAutoSynced, isSyncingAll, savedCharts]);
 
   const upsertSavedChart = (record) => {
     setSavedCharts(prev => {

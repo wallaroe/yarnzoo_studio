@@ -3201,6 +3201,15 @@ export default function App() {
                       <>
                         <div style={{ borderTop: `1px solid ${B.border}`, margin: "4px 0" }} />
                         <button style={dropdownItem} onClick={() => { if (user) { signOutUser(); } else { toggleMenuPanel("auth"); } setOpenMenu(""); }}>{user ? "Uitloggen" : "Inloggen"}</button>
+                        {user && (
+                          <button
+                            style={{ ...dropdownItem, color: isSyncingAll ? B.dark : "#2a7" }}
+                            onClick={() => { syncAllChartsToCloud(); setOpenMenu(""); }}
+                            disabled={isSyncingAll}
+                          >
+                            {isSyncingAll ? "Synchroniseren..." : "☁️ Sync naar cloud"}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>

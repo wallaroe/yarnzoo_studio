@@ -3581,7 +3581,12 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-                          <strong style={{ color: B.dark }}>{saved.title || "Naamloze chart"}</strong><br />
+                          <strong style={{ color: B.dark }}>
+                            {saved.title || "Naamloze chart"}
+                            {saved.cloudId && (
+                              <span title="Opgeslagen in cloud" style={{ marginLeft: "6px", color: "#4a9", fontSize: "11px" }}>☁️</span>
+                            )}
+                          </strong><br />
                           {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
                         </>
                       )}

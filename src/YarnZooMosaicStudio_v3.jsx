@@ -2090,68 +2090,6 @@ export default function App() {
     }
   };
 
-  const syncAllChartsToCloud = async () => {
-    if (!hasSupabaseConfig || !user) {
-      alert("Log eerst in om te synchroniseren naar de cloud.");
-      return;
-    }
-
-    const chartsToSync = savedCharts.filter(c => !c.cloudId && !c.isDeleted);
-    if (chartsToSync.length === 0) {
-      alert("Alle charts zijn al gesynchroniseerd naar de cloud.");
-      return;
-    }
-
-    const confirmSync = window.confirm(
-      `${chartsToSync.length} chart(s) worden naar de cloud geüpload. Doorgaan?`
-    );
-    if (!confirmSync) return;
-
-    setIsSyncingAll(true);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const chart of chartsToSync) {
-      try {
-        const { data, error } = await saveChartToCloud({
-          title: chart.title || "Naamloos",
-          description: '',
-          chartData: chart.chart,
-          gridWidth: chart.gridW,
-          gridHeight: chart.gridH,
-          colorA: chart.colA,
-          colorB: chart.colB,
-          config: {
-            threshold: chart.threshold,
-            projConfig: chart.projConfig,
-            cellSize: chart.cellSize,
-            thresholdRegions: chart.thresholdRegions,
-          },
-          isPublic: false,
-        });
-
-        if (error) {
-          console.error(`Cloud sync error for ${chart.title}:`, error);
-          failCount++;
-        } else if (data?.id) {
-          upsertSavedChart({ ...chart, cloudId: data.id });
-          successCount++;
-        }
-      } catch (err) {
-        console.error(`Cloud sync exception for ${chart.title}:`, err);
-        failCount++;
-      }
-    }
-
-    setIsSyncingAll(false);
-
-    if (failCount === 0) {
-      alert(`${successCount} chart(s) succesvol gesynchroniseerd naar de cloud.`);
-    } else {
-      alert(`Sync voltooid: ${successCount} gelukt, ${failCount} mislukt.`);
-    }
-  };
-
   const newChart = () => {
     setCurrentChartId(null);
     setChartTitle("Nieuwe chart");
@@ -2699,22 +2637,6 @@ export default function App() {
             >
               <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name={user ? "logout" : "login"} /></span>
               <span>{user ? "Uitloggen" : "Inloggen"}</span>
-            </button>
-          )}
-          {hasSupabaseConfig && user && (
-            <button
-              style={{
-                ...btnSidebar,
-                borderColor: isSyncingAll ? B.border : "#4a9",
-                color: isSyncingAll ? B.dark : "#2a7",
-                opacity: isSyncingAll ? 0.6 : 1,
-                cursor: isSyncingAll ? "not-allowed" : "pointer",
-              }}
-              onClick={() => { syncAllChartsToCloud(); if (isMobile) setSidebarOpen(false); }}
-              disabled={isSyncingAll}
-            >
-              <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="cloud" /></span>
-              <span>{isSyncingAll ? "Synchroniseren..." : "Sync naar cloud"}</span>
             </button>
           )}
           <button style={{ ...btnSidebar, borderColor: "#d55", color: "#a11" }} onClick={() => { deleteCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
@@ -3295,15 +3217,6 @@ export default function App() {
                       <>
                         <div style={{ borderTop: `1px solid ${B.border}`, margin: "4px 0" }} />
                         <button style={dropdownItem} onClick={() => { if (user) { signOutUser(); } else { toggleMenuPanel("auth"); } setOpenMenu(""); }}>{user ? "Uitloggen" : "Inloggen"}</button>
-                        {user && (
-                          <button
-                            style={{ ...dropdownItem, color: isSyncingAll ? B.dark : "#2a7" }}
-                            onClick={() => { syncAllChartsToCloud(); setOpenMenu(""); }}
-                            disabled={isSyncingAll}
-                          >
-                            {isSyncingAll ? "Synchroniseren..." : "☁️ Sync naar cloud"}
-                          </button>
-                        )}
                       </>
                     )}
                   </div>
@@ -3593,12 +3506,14 @@ export default function App() {
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflow: "auto" }}>
               {filteredCharts.length === 0 && <div style={{ fontSize: "12px", color: "#999" }}>Geen charts gevonden.</div>}
               {filteredCharts.map(saved => {
-                const restorable = withinRestoreWindow(saved);
-                const deletedLabel = saved.isDeleted ? (restorable ? "verwijderd (herstelbaar)" : "verwijderd (termijn verlopen)") : "actief";
                 const isEditing = editingLibraryId === saved.id;
                 return (
-                  <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ fontSize: "12px", color: "#555", flex: 1 }}>
+                  <div key={saved.id} style={{ border: `1px solid ${B.beige}`, borderRadius: "6px", padding: "8px", display: "flex", gap: "10px", alignItems: "center" }}>
+                    {/* Thumbnail */}
+                    <ChartThumbnail chartData={saved.chart} colA={saved.colA} colB={saved.colB} size={44} />
+
+                    {/* Info */}
+                    <div style={{ fontSize: "12px", color: "#555", flex: 1, minWidth: 0 }}>
                       {isEditing ? (
                         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
                           <input
@@ -3617,17 +3532,24 @@ export default function App() {
                         </div>
                       ) : (
                         <>
-                          <strong style={{ color: B.dark }}>
+                          <strong style={{ color: saved.isDeleted ? "#999" : B.dark }}>
                             {saved.title || "Naamloze chart"}
                             {saved.cloudId && (
                               <span title="Opgeslagen in cloud" style={{ marginLeft: "6px", color: "#4a9", fontSize: "11px" }}>☁️</span>
                             )}
+                            {saved.isDeleted && (
+                              <span style={{ marginLeft: "6px", color: "#c55", fontSize: "10px" }}>🗑️</span>
+                            )}
                           </strong><br />
-                          {saved.gridW} × {saved.gridH} patroon · map: {findFolderName(saved.folderId)} · {deletedLabel}
+                          <span style={{ fontSize: "11px", color: "#888" }}>
+                            {saved.gridW} × {saved.gridH} · {saved.updatedAt ? new Date(saved.updatedAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "onbekend"}
+                          </span>
                         </>
                       )}
                     </div>
-                    <div style={{ display: "flex", gap: "4px" }}>
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                       {!isEditing && (
                         <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => { setEditingLibraryId(saved.id); setEditingLibraryTitle(saved.title || ""); }} title="Hernoemen">✏️</button>
                       )}
@@ -4687,6 +4609,52 @@ function Panel({ title, children }) {
       <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "0.02em", color: B.orange, marginBottom: "8px", fontFamily: F.heading }}>{title}</div>
       {children}
     </div>
+  );
+}
+
+function ChartThumbnail({ chartData, colA, colB, size = 40 }) {
+  if (!chartData || !Array.isArray(chartData) || chartData.length === 0) {
+    return (
+      <div style={{
+        width: size,
+        height: size,
+        background: "#f0f0f0",
+        borderRadius: "4px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "10px",
+        color: "#999",
+      }}>
+        ?
+      </div>
+    );
+  }
+
+  const rows = chartData.length;
+  const cols = chartData[0]?.length || 0;
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${cols} ${rows}`}
+      style={{ borderRadius: "4px", border: "1px solid #ddd", background: "#fff" }}
+      preserveAspectRatio="xMidYMid meet"
+    >
+      {chartData.map((row, y) =>
+        row.map((cell, x) => (
+          <rect
+            key={`${x}-${y}`}
+            x={x}
+            y={y}
+            width={1}
+            height={1}
+            fill={cell ? (colA?.hex || "#5a3f3f") : (colB?.hex || "#f3efe7")}
+          />
+        ))
+      )}
+    </svg>
   );
 }
 

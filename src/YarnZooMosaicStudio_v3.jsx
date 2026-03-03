@@ -2182,6 +2182,46 @@ export default function App() {
     newChart();
   };
 
+  const softDeleteChartById = (chartId) => {
+    const chart = savedCharts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    if (!window.confirm(`Weet je zeker dat je "${chart.title || "deze chart"}" wilt verwijderen?\n\nDe chart wordt 7 dagen bewaard en kan worden hersteld.`)) {
+      return;
+    }
+
+    const deletedRecord = {
+      ...chart,
+      previousFolderId: chart.folderId || DEFAULT_FOLDER_ID,
+      folderId: DELETED_FOLDER_ID,
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    upsertSavedChart(deletedRecord);
+
+    // If this was the current chart, close it
+    if (currentChartId === chartId) {
+      newChart();
+    }
+  };
+
+  const permanentDeleteChartById = (chartId) => {
+    const chart = savedCharts.find(c => c.id === chartId);
+    if (!chart) return;
+
+    if (!window.confirm(`Weet je zeker dat je "${chart.title || "deze chart"}" PERMANENT wilt verwijderen?\n\n⚠️ Dit kan niet ongedaan worden gemaakt!`)) {
+      return;
+    }
+
+    setSavedCharts(prev => prev.filter(c => c.id !== chartId));
+
+    // If this was the current chart, close it
+    if (currentChartId === chartId) {
+      newChart();
+    }
+  };
+
   const addFolder = () => {
     const name = folderDraftName.trim();
     if (!name) return;
@@ -3550,11 +3590,25 @@ export default function App() {
 
                     {/* Actions */}
                     <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                      {!isEditing && (
+                      {!isEditing && !saved.isDeleted && (
                         <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => { setEditingLibraryId(saved.id); setEditingLibraryTitle(saved.title || ""); }} title="Hernoemen">✏️</button>
                       )}
+                      {!saved.isDeleted && (
+                        <button
+                          style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid #dcc`, color: "#a66" }}
+                          onClick={() => softDeleteChartById(saved.id)}
+                          title="Verwijderen"
+                        >🗑️</button>
+                      )}
+                      {saved.isDeleted && (
+                        <button
+                          style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid #c99`, color: "#a33" }}
+                          onClick={() => permanentDeleteChartById(saved.id)}
+                          title="Permanent verwijderen"
+                        >❌</button>
+                      )}
                       <button style={btnSm} onClick={() => openSavedChart(saved)}>
-                        {saved.isDeleted ? "Herstel + open" : "Open"}
+                        {saved.isDeleted ? "Herstel" : "Open"}
                       </button>
                     </div>
                   </div>

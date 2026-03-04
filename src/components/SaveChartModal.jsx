@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { saveChart } from '../lib/database'
+import { useSystemDialog } from './SystemDialogProvider'
 
 const B = {
     orange: "#F5921B",
@@ -11,6 +12,7 @@ const B = {
 }
 
 export default function SaveChartModal({ chart, chartData, onClose, onSaved, existingChart = null }) {
+    const { showConfirm } = useSystemDialog()
     const [title, setTitle] = useState(existingChart?.title || '')
     const [description, setDescription] = useState(existingChart?.description || '')
     const [isPublic, setIsPublic] = useState(existingChart?.is_public || false)
@@ -26,8 +28,14 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
         }
 
         if (willOverwriteExisting) {
-            const confirmed = window.confirm(
-                'Je staat op het punt een bestaand cloudpatroon te overschrijven. Weet je dit zeker?'
+            const confirmed = await showConfirm(
+                'Je staat op het punt een bestaand cloudpatroon te overschrijven. Weet je dit zeker?',
+                {
+                    title: 'Cloudpatroon overschrijven',
+                    confirmLabel: 'Overschrijven',
+                    cancelLabel: 'Annuleren',
+                    tone: 'danger',
+                }
             )
             if (!confirmed) return
         }

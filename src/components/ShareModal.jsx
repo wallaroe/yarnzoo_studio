@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { shareChart } from '../lib/database'
+import { useSystemDialog } from './SystemDialogProvider'
 
 const B = {
     orange: "#F5921B",
@@ -11,6 +12,7 @@ const B = {
 }
 
 export default function ShareModal({ chartId, onClose }) {
+    const { showAlert } = useSystemDialog()
     const [loading, setLoading] = useState(false)
     const [shareLink, setShareLink] = useState('')
     const [copied, setCopied] = useState(false)
@@ -24,7 +26,7 @@ export default function ShareModal({ chartId, onClose }) {
             const link = `${window.location.origin}/?share=${data.share_token}`
             setShareLink(link)
         } catch (err) {
-            alert('Kon geen deellink genereren: ' + err.message)
+            showAlert('Kon geen deellink genereren: ' + err.message, { title: 'Delen mislukt', tone: 'danger' })
         } finally {
             setLoading(false)
         }

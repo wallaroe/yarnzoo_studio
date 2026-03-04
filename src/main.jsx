@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './YarnZooMosaicStudio_v3.jsx'
 import { AuthProvider, useAuth } from './lib/AuthContext'
 import { hasSupabaseConfig } from './lib/supabaseClient'
+import { SystemDialogProvider } from './components/SystemDialogProvider'
 
 function LoginScreen() {
   const [mode, setMode] = useState('signin')
@@ -125,9 +126,11 @@ function AppWithGate() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AuthProvider>
-      <AppWithGate />
-    </AuthProvider>
+    <SystemDialogProvider>
+      <AuthProvider>
+        <AppWithGate />
+      </AuthProvider>
+    </SystemDialogProvider>
   </React.StrictMode>,
 )
 

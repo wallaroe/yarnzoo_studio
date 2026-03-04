@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { supabase, hasSupabaseConfig } from "./lib/supabaseClient";
 import { saveChart as saveChartToCloud, loadUserCharts } from "./lib/database";
 import jsPDF from "jspdf";
+import { useSystemDialog } from "./components/SystemDialogProvider";
 
 // ============================================================
 // YARNZOO MOSAIC STUDIO v0.3.1 — Edge Stitches & RtoL Config
@@ -1439,6 +1440,7 @@ function VisualPreview({ chart, colA, colB }) {
 // Main App
 // ============================================================
 export default function App() {
+  const { showAlert, showConfirm } = useSystemDialog();
   const [step, setStep] = useState("upload");
   const [origImage, setOrigImage] = useState(null);
   const [imgEl, setImgEl] = useState(null);
@@ -1639,24 +1641,24 @@ export default function App() {
   const saveColorToPalette = useCallback((color) => {
     const normalized = normalizePaletteEntry(color, 0);
     if (!normalized) {
-      alert("Kies een geldige kleurcode (#RRGGBB) om op te slaan in het palet.");
+      showAlert("Kies een geldige kleurcode (#RRGGBB) om op te slaan in het palet.");
       return;
     }
     const lockedConflict = yarnPalette.find((entry) =>
       entry.locked && entry.name.toLowerCase() === normalized.name.toLowerCase() && entry.hex !== normalized.hex,
     );
     if (lockedConflict) {
-      alert(`'${lockedConflict.name}' is een basispalet-kleur en kan niet overschreven worden.`);
+      showAlert(`'${lockedConflict.name}' is een basispalet-kleur en kan niet overschreven worden.`);
       return;
     }
     setYarnPalette(prev => upsertPaletteWithColor(prev, normalized));
-  }, [yarnPalette]);
+  }, [showAlert, yarnPalette]);
 
   const renamePaletteEntry = useCallback((index) => {
     const entry = yarnPalette[index];
     if (!entry) return;
     if (entry.locked) {
-      alert("Basispalet-kleuren zijn vergrendeld en kunnen niet hernoemd worden.");
+      showAlert("Basispalet-kleuren zijn vergrendeld en kunnen niet hernoemd worden.");
       return;
     }
     const nextName = window.prompt("Nieuwe kleurnaam", entry.name);
@@ -1664,7 +1666,7 @@ export default function App() {
     const cleanName = nextName.trim();
     const duplicate = yarnPalette.some((item, itemIdx) => itemIdx !== index && item.name.toLowerCase() === cleanName.toLowerCase());
     if (duplicate) {
-      alert("Er bestaat al een kleur met deze naam.");
+      showAlert("Er bestaat al een kleur met deze naam.");
       return;
     }
     setYarnPalette(prev => {
@@ -1673,23 +1675,35 @@ export default function App() {
       next[index] = { ...next[index], name: cleanName, locked: false };
       return next;
     });
-  }, [yarnPalette]);
+  }, [showAlert, yarnPalette]);
 
-  const removePaletteEntry = useCallback((index) => {
+  const removePaletteEntry = useCallback(async (index) => {
     const entry = yarnPalette[index];
     if (!entry) return;
     if (entry.locked) {
-      alert("Basispalet-kleuren zijn vergrendeld en kunnen niet verwijderd worden.");
+      showAlert("Basispalet-kleuren zijn vergrendeld en kunnen niet verwijderd worden.");
       return;
     }
-    if (!window.confirm(`Kleur '${entry.name}' verwijderen uit palet?`)) return;
+    const confirmed = await showConfirm(`Kleur '${entry.name}' verwijderen uit palet?`, {
+      title: "Kleur verwijderen",
+      confirmLabel: "Verwijderen",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setYarnPalette(prev => prev.filter((_item, itemIdx) => itemIdx !== index));
-  }, [yarnPalette]);
+  }, [showAlert, showConfirm, yarnPalette]);
 
-  const resetCustomPalette = useCallback(() => {
-    if (!window.confirm("Alle aangepaste paletkleuren verwijderen en alleen basispalet behouden?")) return;
+  const resetCustomPalette = useCallback(async () => {
+    const confirmed = await showConfirm("Alle aangepaste paletkleuren verwijderen en alleen basispalet behouden?", {
+      title: "Palet resetten",
+      confirmLabel: "Resetten",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setYarnPalette(DEFAULT_YARN_PALETTE.map((entry, idx) => normalizePaletteEntry({ ...entry, locked: true }, idx)).filter(Boolean));
-  }, []);
+  }, [showConfirm]);
 
   const updateTranslationValue = useCallback((lang, field, value) => {
     if (translationsLocked) return;
@@ -1706,11 +1720,11 @@ export default function App() {
     if (translationsLocked) return;
     const code = newLanguageCode.trim().toLowerCase();
     if (!code.match(/^[a-z]{2,5}$/)) {
-      alert("Gebruik een taalcode met 2-5 letters, bijvoorbeeld: fr, es, it.");
+      showAlert("Gebruik een taalcode met 2-5 letters, bijvoorbeeld: fr, es, it.");
       return;
     }
     if (patternTexts[code]) {
-      alert("Deze taalcode bestaat al.");
+      showAlert("Deze taalcode bestaat al.");
       return;
     }
     const label = newLanguageLabel.trim() || code.toUpperCase();
@@ -1721,38 +1735,50 @@ export default function App() {
     setPatternLanguage(code);
     setNewLanguageCode("");
     setNewLanguageLabel("");
-  }, [newLanguageCode, newLanguageLabel, patternTexts]);
+  }, [newLanguageCode, newLanguageLabel, patternTexts, showAlert]);
 
-  const removeTranslationLanguage = useCallback((lang) => {
+  const removeTranslationLanguage = useCallback(async (lang) => {
     if (translationsLocked) return;
     if (lang === "nl") {
-      alert("Nederlands is de fallback en kan niet verwijderd worden.");
+      showAlert("Nederlands is de fallback en kan niet verwijderd worden.");
       return;
     }
-    if (!window.confirm(`Taal '${lang}' verwijderen?`)) return;
+    const confirmed = await showConfirm(`Taal '${lang}' verwijderen?`, {
+      title: "Taal verwijderen",
+      confirmLabel: "Verwijderen",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setPatternTexts(prev => {
       const next = { ...prev };
       delete next[lang];
       return next;
     });
     if (patternLanguage === lang) setPatternLanguage("nl");
-  }, [patternLanguage, translationsLocked]);
+  }, [patternLanguage, showAlert, showConfirm, translationsLocked]);
 
   const toggleTranslationsLock = useCallback(() => {
     if (translationsLocked && hasSupabaseConfig && !user) {
-      alert("Log in om de globale vertaaltabel te bewerken.");
+      showAlert("Log in om de globale vertaaltabel te bewerken.");
       return;
     }
     setTranslationsLocked(prev => !prev);
-  }, [translationsLocked, user]);
+  }, [showAlert, translationsLocked, user]);
 
-  const resetTranslationsToDefault = useCallback(() => {
+  const resetTranslationsToDefault = useCallback(async () => {
     if (translationsLocked) return;
-    if (!window.confirm("Alle aangepaste vertalingen terugzetten naar de standaard?")) return;
+    const confirmed = await showConfirm("Alle aangepaste vertalingen terugzetten naar de standaard?", {
+      title: "Vertalingen resetten",
+      confirmLabel: "Resetten",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) return;
     setPatternTexts(normalizePatternTexts(null));
     setPatternLanguage("nl");
     setTranslationsLocked(true);
-  }, [translationsLocked]);
+  }, [showConfirm, translationsLocked]);
 
   useEffect(() => () => {
     if (ruleNoticeTimer.current) clearTimeout(ruleNoticeTimer.current);
@@ -2099,7 +2125,7 @@ export default function App() {
 
   const saveCurrentChart = () => {
     if (!chart) {
-      alert("Er is nog geen teltekening om op te slaan.");
+      showAlert("Er is nog geen teltekening om op te slaan.");
       return;
     }
     // Open modal met huidige waarden
@@ -2110,7 +2136,7 @@ export default function App() {
 
   const confirmSaveChart = async () => {
     if (!saveDraftTitle.trim()) {
-      alert("Geef je patroon een naam.");
+      showAlert("Geef je patroon een naam.");
       return;
     }
     const nextTitle = saveDraftTitle.trim();
@@ -2123,15 +2149,27 @@ export default function App() {
 
     let overwriteTarget = null;
     if (currentRecord) {
-      const overwriteCurrent = window.confirm(
-        `Je werkt in een bestaand patroon "${currentRecord.title || "Naamloze chart"}".\n\nOK = bestaand patroon overschrijven\nAnnuleren = opslaan als nieuw patroon`,
+      const overwriteCurrent = await showConfirm(
+        `Je werkt in een bestaand patroon "${currentRecord.title || "Naamloze chart"}".\n\nKies "Overschrijven" om het bestaande patroon te vervangen, of "Opslaan als nieuw" om een nieuw bestand te maken.`,
+        {
+          title: "Bestaand patroon gevonden",
+          confirmLabel: "Overschrijven",
+          cancelLabel: "Opslaan als nieuw",
+          tone: "warning",
+        },
       );
       if (overwriteCurrent) overwriteTarget = currentRecord;
     }
 
     if (!overwriteTarget && titleConflict) {
-      const overwriteByTitle = window.confirm(
-        `Er bestaat al een patroon met de naam "${nextTitle}".\n\nOK = bestaand patroon overschrijven\nAnnuleren = opslaan als nieuw patroon`,
+      const overwriteByTitle = await showConfirm(
+        `Er bestaat al een patroon met de naam "${nextTitle}".\n\nKies "Overschrijven" om het bestaande patroon te vervangen, of "Opslaan als nieuw" om een nieuw bestand te maken.`,
+        {
+          title: "Naamconflict",
+          confirmLabel: "Overschrijven",
+          cancelLabel: "Opslaan als nieuw",
+          tone: "warning",
+        },
       );
       if (overwriteByTitle) overwriteTarget = titleConflict;
     }
@@ -2177,7 +2215,7 @@ export default function App() {
         });
         if (error) {
           console.error("Cloud save error:", error);
-          alert("Lokaal opgeslagen. Cloud opslag mislukt: " + error.message);
+          showAlert("Lokaal opgeslagen. Cloud opslag mislukt: " + error.message);
         } else {
           const syncedRecord = {
             ...record,
@@ -2186,14 +2224,14 @@ export default function App() {
             createdAt: data?.created_at || record.createdAt,
           };
           upsertSavedChart(syncedRecord);
-          alert("Chart opgeslagen (lokaal + cloud).");
+          showAlert("Chart opgeslagen (lokaal + cloud).");
         }
       } catch (err) {
         console.error("Cloud save exception:", err);
-        alert("Lokaal opgeslagen. Cloud opslag mislukt.");
+        showAlert("Lokaal opgeslagen. Cloud opslag mislukt.");
       }
     } else {
-      alert("Chart opgeslagen.");
+      showAlert("Chart opgeslagen.");
     }
   };
 
@@ -2217,7 +2255,7 @@ export default function App() {
     const deletedAt = record?.deletedAt ? new Date(record.deletedAt).getTime() : null;
     const isExpiredDeleted = record?.isDeleted && deletedAt && (now - deletedAt > ONE_WEEK_MS);
     if (isExpiredDeleted) {
-      alert("Deze verwijderde chart is ouder dan 7 dagen en kan niet meer automatisch worden hersteld.");
+      showAlert("Deze verwijderde chart is ouder dan 7 dagen en kan niet meer automatisch worden hersteld.");
       return;
     }
 
@@ -2276,7 +2314,7 @@ export default function App() {
   const exportChartFile = () => {
     const record = buildCurrentChartRecord();
     if (!record) {
-      alert("Er is geen actieve chart om te exporteren.");
+      showAlert("Er is geen actieve chart om te exporteren.");
       return;
     }
 
@@ -2325,7 +2363,7 @@ export default function App() {
       const parsed = JSON.parse(rawText);
       const { data, error } = normalizeImportedChartPayload(parsed);
       if (error) {
-        alert(`Import mislukt: ${error}`);
+        showAlert(`Import mislukt: ${error}`);
         return;
       }
 
@@ -2362,9 +2400,9 @@ export default function App() {
       upsertSavedChart(importRecord);
       setLibraryFilter("all");
       openSavedChart(importRecord);
-      alert(`Chart "${importRecord.title}" is geimporteerd.`);
+      showAlert(`Chart "${importRecord.title}" is geimporteerd.`);
     } catch (err) {
-      alert("Import mislukt: bestand is geen geldige JSON.");
+      showAlert("Import mislukt: bestand is geen geldige JSON.");
     } finally {
       e.target.value = "";
     }
@@ -2372,7 +2410,7 @@ export default function App() {
 
   const deleteCurrentChart = () => {
     if (!chart) {
-      alert("Er is geen actieve chart om te verwijderen.");
+      showAlert("Er is geen actieve chart om te verwijderen.");
       return;
     }
     const record = buildCurrentChartRecord();
@@ -2389,11 +2427,17 @@ export default function App() {
     newChart();
   };
 
-  const softDeleteChartById = (chartId) => {
+  const softDeleteChartById = async (chartId) => {
     const chart = savedCharts.find(c => c.id === chartId);
     if (!chart) return;
 
-    if (!window.confirm(`Weet je zeker dat je "${chart.title || "deze chart"}" wilt verwijderen?\n\nDe chart wordt 7 dagen bewaard en kan worden hersteld.`)) {
+    const confirmed = await showConfirm(`Weet je zeker dat je "${chart.title || "deze chart"}" wilt verwijderen?\n\nDe chart wordt 7 dagen bewaard en kan worden hersteld.`, {
+      title: "Chart verwijderen",
+      confirmLabel: "Verwijderen",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -2413,11 +2457,17 @@ export default function App() {
     }
   };
 
-  const permanentDeleteChartById = (chartId) => {
+  const permanentDeleteChartById = async (chartId) => {
     const chart = savedCharts.find(c => c.id === chartId);
     if (!chart) return;
 
-    if (!window.confirm(`Weet je zeker dat je "${chart.title || "deze chart"}" PERMANENT wilt verwijderen?\n\n⚠️ Dit kan niet ongedaan worden gemaakt!`)) {
+    const confirmed = await showConfirm(`Weet je zeker dat je "${chart.title || "deze chart"}" PERMANENT wilt verwijderen?\n\nDit kan niet ongedaan worden gemaakt.`, {
+      title: "Permanent verwijderen",
+      confirmLabel: "Permanent verwijderen",
+      cancelLabel: "Annuleren",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -2462,7 +2512,7 @@ export default function App() {
     const email = authEmail.trim();
     const password = authPassword;
     if (!email || !password) {
-      alert("Vul e-mailadres en wachtwoord in.");
+      showAlert("Vul e-mailadres en wachtwoord in.");
       return;
     }
     setAuthBusy(true);
@@ -2470,9 +2520,9 @@ export default function App() {
     setAuthBusy(false);
     if (error) {
       if (error.message?.toLowerCase().includes("invalid login credentials")) {
-        alert("Onjuiste inloggegevens.");
+        showAlert("Onjuiste inloggegevens.");
       } else {
-        alert(`Inloggen mislukt: ${error.message}`);
+        showAlert(`Inloggen mislukt: ${error.message}`);
       }
       return;
     }
@@ -2486,18 +2536,18 @@ export default function App() {
     const email = authEmail.trim();
     const password = authPassword;
     if (!email || !password) {
-      alert("Vul e-mailadres en wachtwoord in.");
+      showAlert("Vul e-mailadres en wachtwoord in.");
       return;
     }
     if (password.length < 6) {
-      alert("Wachtwoord moet minimaal 6 tekens bevatten.");
+      showAlert("Wachtwoord moet minimaal 6 tekens bevatten.");
       return;
     }
     setAuthBusy(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setAuthBusy(false);
     if (error) {
-      alert(`Registreren mislukt: ${error.message}`);
+      showAlert(`Registreren mislukt: ${error.message}`);
       return;
     }
     setAuthPassword("");
@@ -2506,7 +2556,7 @@ export default function App() {
       setCloudSyncState("syncing");
       return;
     }
-    alert("Account aangemaakt. Controleer je e-mail voor bevestiging en log daarna in.");
+    showAlert("Account aangemaakt. Controleer je e-mail voor bevestiging en log daarna in.");
     setAuthMode("signin");
   };
 
@@ -2967,7 +3017,7 @@ export default function App() {
   // ============================================================
   const generatePatternPDF = async () => {
     if (!chart || !patternRows || patternRows.length === 0) {
-      alert("Er is geen patroon om te exporteren als PDF.");
+      showAlert("Er is geen patroon om te exporteren als PDF.");
       return;
     }
     setPdfGenerating(true);
@@ -3332,7 +3382,7 @@ export default function App() {
       doc.save(fileName);
     } catch (err) {
       console.error("PDF generation error:", err);
-      alert("Er ging iets mis bij het genereren van de PDF: " + err.message);
+      showAlert("Er ging iets mis bij het genereren van de PDF: " + err.message);
     } finally {
       setPdfGenerating(false);
     }
@@ -3340,7 +3390,7 @@ export default function App() {
 
   const printChart = () => {
     if (!chart || !printLayout) {
-      alert("Er is geen chart om te printen.");
+      showAlert("Er is geen chart om te printen.");
       return;
     }
 

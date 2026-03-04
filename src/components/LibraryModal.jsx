@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { loadUserCharts, loadUserFolders, deleteChart, renameChart, createFolder, deleteFolder } from '../lib/database'
 import { useAuth } from '../lib/AuthContext'
+import { useSystemDialog } from './SystemDialogProvider'
 
 const B = {
     orange: "#F5921B",
@@ -29,6 +30,7 @@ const formatChartLastSaved = (updatedAt, createdAt) => {
 
 export default function LibraryModal({ onClose, onLoadChart }) {
     const { user } = useAuth()
+    const { showConfirm } = useSystemDialog()
     const [charts, setCharts] = useState([])
     const [folders, setFolders] = useState([])
     const [loading, setLoading] = useState(true)
@@ -54,7 +56,13 @@ export default function LibraryModal({ onClose, onLoadChart }) {
     }
 
     const handleDeleteChart = async (chartId) => {
-        if (!confirm('Weet je zeker dat je dit patroon wilt verwijderen?')) return
+        const confirmed = await showConfirm('Weet je zeker dat je dit patroon wilt verwijderen?', {
+            title: 'Patroon verwijderen',
+            confirmLabel: 'Verwijderen',
+            cancelLabel: 'Annuleren',
+            tone: 'danger',
+        })
+        if (!confirmed) return
 
         const { error } = await deleteChart(chartId)
         if (!error) {
@@ -101,7 +109,13 @@ export default function LibraryModal({ onClose, onLoadChart }) {
     }
 
     const handleDeleteFolder = async (folderId) => {
-        if (!confirm('Weet je zeker dat je deze map wilt verwijderen?')) return
+        const confirmed = await showConfirm('Weet je zeker dat je deze map wilt verwijderen?', {
+            title: 'Map verwijderen',
+            confirmLabel: 'Verwijderen',
+            cancelLabel: 'Annuleren',
+            tone: 'danger',
+        })
+        if (!confirmed) return
 
         const { error } = await deleteFolder(folderId)
         if (!error) {

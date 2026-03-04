@@ -4,6 +4,7 @@ import AuthModal from './AuthModal'
 import SaveChartModal from './SaveChartModal'
 import LibraryModal from './LibraryModal'
 import ShareModal from './ShareModal'
+import { useSystemDialog } from './SystemDialogProvider'
 
 const B = {
     orange: "#F5921B",
@@ -15,6 +16,7 @@ const B = {
 
 export default function CloudToolbar({ chart, chartData, currentChartId, onChartLoaded }) {
     const { user, signOut } = useAuth()
+    const { showAlert } = useSystemDialog()
     const [showAuthModal, setShowAuthModal] = useState(false)
     const [showSaveModal, setShowSaveModal] = useState(false)
     const [showLibraryModal, setShowLibraryModal] = useState(false)
@@ -23,7 +25,7 @@ export default function CloudToolbar({ chart, chartData, currentChartId, onChart
 
     const handleChartSaved = (savedChart) => {
         setSavedChart(savedChart)
-        alert(`✅ Patroon "${savedChart.title}" opgeslagen in de cloud!`)
+        showAlert(`Patroon "${savedChart.title}" opgeslagen in de cloud!`, { title: 'Opgeslagen' })
     }
 
     const handleLoadChart = (chartData) => {

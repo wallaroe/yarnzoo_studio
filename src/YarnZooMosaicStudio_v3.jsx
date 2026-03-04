@@ -283,6 +283,79 @@ function normalizeActiveColor(color, fallback) {
   };
 }
 
+function normalizeImportedChartPayload(payload) {
+  if (!payload || typeof payload !== "object") {
+    return { error: "Bestand bevat geen geldig JSON-object." };
+  }
+
+  const rawRecord = payload.chart && typeof payload.chart === "object" ? payload.chart : payload;
+  if (!rawRecord || typeof rawRecord !== "object") {
+    return { error: "Er is geen chart-data gevonden in dit bestand." };
+  }
+
+  const rawChart = Array.isArray(rawRecord.chart)
+    ? rawRecord.chart
+    : Array.isArray(rawRecord.chart_data)
+      ? rawRecord.chart_data
+      : null;
+
+  if (!rawChart || rawChart.length === 0 || !rawChart.every(row => Array.isArray(row) && row.length > 0)) {
+    return { error: "Chart-data ontbreekt of heeft een ongeldig formaat." };
+  }
+
+  const gridH = Number(rawRecord.gridH ?? rawRecord.grid_height ?? rawChart.length);
+  const gridW = Number(rawRecord.gridW ?? rawRecord.grid_width ?? rawChart[0].length);
+
+  if (!Number.isFinite(gridW) || !Number.isFinite(gridH) || gridW <= 0 || gridH <= 0) {
+    return { error: "Grid-afmetingen zijn ongeldig in het importbestand." };
+  }
+
+  const normalizedChart = rawChart.map((row) => row.map((cell) => !!cell));
+  const hasInvalidRowLengths = normalizedChart.some((row) => row.length !== gridW);
+  if (normalizedChart.length !== gridH || hasInvalidRowLengths) {
+    return { error: "Chart-data komt niet overeen met de opgegeven grid-afmetingen." };
+  }
+
+  const normalizedThresholdRegions = Array.isArray(rawRecord.thresholdRegions)
+    ? rawRecord.thresholdRegions
+        .filter((region) => region && typeof region === "object")
+        .map((region) => ({
+          id: String(region.id || `region-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+          x: Number(region.x) || 0,
+          y: Number(region.y) || 0,
+          width: Math.max(1, Number(region.width) || 1),
+          height: Math.max(1, Number(region.height) || 1),
+          threshold: Math.max(0, Math.min(255, Number(region.threshold) || 128)),
+        }))
+    : [];
+
+  return {
+    data: {
+      title: String(rawRecord.title || "Geimporteerde chart").trim() || "Geimporteerde chart",
+      gridW,
+      gridH,
+      threshold: Number(rawRecord.threshold) || 128,
+      chart: normalizedChart,
+      cellSize: Math.max(2, Number(rawRecord.cellSize) || 4),
+      colA: normalizeActiveColor(rawRecord.colA || rawRecord.color_a, DEFAULT_COLOR_A),
+      colB: normalizeActiveColor(rawRecord.colB || rawRecord.color_b, DEFAULT_COLOR_B),
+      projConfig: {
+        direction: rawRecord?.projConfig?.direction === "LtoR" ? "LtoR" : "RtoL",
+        showEdges: typeof rawRecord?.projConfig?.showEdges === "boolean" ? rawRecord.projConfig.showEdges : true,
+      },
+      calcUnit: rawRecord.calcUnit === "inch" ? "inch" : "cm",
+      calcIncludesEdges: typeof rawRecord.calcIncludesEdges === "boolean" ? rawRecord.calcIncludesEdges : true,
+      swatchWidth: Number(rawRecord.swatchWidth) || 10,
+      swatchHeight: Number(rawRecord.swatchHeight) || 10,
+      swatchStitches: Number(rawRecord.swatchStitches) || 28,
+      swatchRows: Number(rawRecord.swatchRows) || 28,
+      desiredWidth: Number(rawRecord.desiredWidth) || 35,
+      desiredHeight: Number(rawRecord.desiredHeight) || 45,
+      thresholdRegions: normalizedThresholdRegions,
+    },
+  };
+}
+
 function upsertPaletteWithColor(prevPalette, color) {
   const normalized = normalizePaletteEntry(color, prevPalette.length);
   if (!normalized) return prevPalette;
@@ -1460,6 +1533,7 @@ export default function App() {
   const previewRef = useRef(null);
   const origImageContainerRef = useRef(null);
   const origImageRef = useRef(null);
+  const chartImportInputRef = useRef(null);
   const selectableFolders = folders.filter(f => f.id !== DELETED_FOLDER_ID);
   const findFolderName = (id) => folders.find(f => f.id === id)?.name || "Onbekend";
   const cloudStatusLabel = {
@@ -2018,6 +2092,7 @@ export default function App() {
       swatchRows,
       desiredWidth,
       desiredHeight,
+      thresholdRegions: thresholdRegions.map(region => ({ ...region })),
     };
     return { ...base, ...overrides, id: recordId, updatedAt: now };
   };
@@ -2038,12 +2113,40 @@ export default function App() {
       alert("Geef je patroon een naam.");
       return;
     }
+    const nextTitle = saveDraftTitle.trim();
+    const activeCharts = savedCharts.filter(c => !c.isDeleted);
+    const currentRecord = currentChartId ? activeCharts.find(c => c.id === currentChartId) : null;
+    const titleConflict = activeCharts.find(c =>
+      c.id !== currentRecord?.id &&
+      String(c.title || "").trim().toLowerCase() === nextTitle.toLowerCase(),
+    );
+
+    let overwriteTarget = null;
+    if (currentRecord) {
+      const overwriteCurrent = window.confirm(
+        `Je werkt in een bestaand patroon "${currentRecord.title || "Naamloze chart"}".\n\nOK = bestaand patroon overschrijven\nAnnuleren = opslaan als nieuw patroon`,
+      );
+      if (overwriteCurrent) overwriteTarget = currentRecord;
+    }
+
+    if (!overwriteTarget && titleConflict) {
+      const overwriteByTitle = window.confirm(
+        `Er bestaat al een patroon met de naam "${nextTitle}".\n\nOK = bestaand patroon overschrijven\nAnnuleren = opslaan als nieuw patroon`,
+      );
+      if (overwriteByTitle) overwriteTarget = titleConflict;
+    }
+
+    const targetId = overwriteTarget?.id || `chart-${Date.now()}`;
+    const targetCloudId = overwriteTarget?.cloudId || null;
+
     // Update de state met de nieuwe waarden
-    setChartTitle(saveDraftTitle.trim());
+    setChartTitle(nextTitle);
     setChartFolderId(saveDraftFolderId);
     // Bouw en sla het record op
     const record = buildCurrentChartRecord({
-      title: saveDraftTitle.trim(),
+      id: targetId,
+      cloudId: targetCloudId,
+      title: nextTitle,
       folderId: saveDraftFolderId,
     });
     if (!record) return;
@@ -2069,16 +2172,20 @@ export default function App() {
             thresholdRegions: record.thresholdRegions,
           },
           isPublic: false,
-          chartId: record.cloudId || null, // Use existing cloud ID if updating
+          chartId: targetCloudId,
+          expectedUpdatedAt: targetCloudId ? (overwriteTarget?.updatedAt || null) : null,
         });
         if (error) {
           console.error("Cloud save error:", error);
           alert("Lokaal opgeslagen. Cloud opslag mislukt: " + error.message);
         } else {
-          // Store the cloud ID for future updates
-          if (data?.id && !record.cloudId) {
-            upsertSavedChart({ ...record, cloudId: data.id });
-          }
+          const syncedRecord = {
+            ...record,
+            cloudId: data?.id || record.cloudId || null,
+            updatedAt: data?.updated_at || record.updatedAt,
+            createdAt: data?.created_at || record.createdAt,
+          };
+          upsertSavedChart(syncedRecord);
           alert("Chart opgeslagen (lokaal + cloud).");
         }
       } catch (err) {
@@ -2157,10 +2264,110 @@ export default function App() {
     setSwatchRows(nextRecord.swatchRows || 28);
     setDesiredWidth(nextRecord.desiredWidth || 35);
     setDesiredHeight(nextRecord.desiredHeight || 45);
+    setThresholdRegions(Array.isArray(nextRecord.thresholdRegions) ? nextRecord.thresholdRegions.map(region => ({ ...region })) : []);
+    setActiveRegionId(null);
+    setIsSelectingRegion(false);
     setOrigImage(null);
     setImgEl(null);
     setStep("edit");
     setOpenMenu("");
+  };
+
+  const exportChartFile = () => {
+    const record = buildCurrentChartRecord();
+    if (!record) {
+      alert("Er is geen actieve chart om te exporteren.");
+      return;
+    }
+
+    const payload = {
+      format: "yarnzoo.chart",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      chart: {
+        ...record,
+        id: null,
+        cloudId: null,
+        folderId: DEFAULT_FOLDER_ID,
+        previousFolderId: null,
+        isDeleted: false,
+        deletedAt: null,
+      },
+    };
+
+    const safeName = (record.title || "chart")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_") || "chart";
+    const fileName = `${safeName}.yarnzoo-chart.json`;
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const triggerChartImport = () => {
+    if (!chartImportInputRef.current) return;
+    chartImportInputRef.current.value = "";
+    chartImportInputRef.current.click();
+  };
+
+  const handleImportChartFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const rawText = await file.text();
+      const parsed = JSON.parse(rawText);
+      const { data, error } = normalizeImportedChartPayload(parsed);
+      if (error) {
+        alert(`Import mislukt: ${error}`);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const importRecord = {
+        id: `chart-${Date.now()}`,
+        cloudId: null,
+        title: data.title,
+        folderId: DEFAULT_FOLDER_ID,
+        previousFolderId: null,
+        isDeleted: false,
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+        gridW: data.gridW,
+        gridH: data.gridH,
+        threshold: data.threshold,
+        chart: data.chart,
+        cellSize: data.cellSize,
+        colA: data.colA,
+        colB: data.colB,
+        projConfig: data.projConfig,
+        calcUnit: data.calcUnit,
+        calcIncludesEdges: data.calcIncludesEdges,
+        swatchWidth: data.swatchWidth,
+        swatchHeight: data.swatchHeight,
+        swatchStitches: data.swatchStitches,
+        swatchRows: data.swatchRows,
+        desiredWidth: data.desiredWidth,
+        desiredHeight: data.desiredHeight,
+        thresholdRegions: data.thresholdRegions,
+      };
+
+      upsertSavedChart(importRecord);
+      setLibraryFilter("all");
+      openSavedChart(importRecord);
+      alert(`Chart "${importRecord.title}" is geimporteerd.`);
+    } catch (err) {
+      alert("Import mislukt: bestand is geen geldige JSON.");
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const deleteCurrentChart = () => {
@@ -2656,6 +2863,12 @@ export default function App() {
           </button>
           <button style={btnSidebar} onClick={() => { saveCurrentChart(); if (isMobile) setSidebarOpen(false); }}>
             <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="save" /></span><span>Opslaan</span>
+          </button>
+          <button style={btnSidebar} onClick={() => { exportChartFile(); if (isMobile) setSidebarOpen(false); }}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="export" /></span><span>Chart exporteren</span>
+          </button>
+          <button style={btnSidebar} onClick={() => { triggerChartImport(); if (isMobile) setSidebarOpen(false); }}>
+            <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="import" /></span><span>Chart importeren</span>
           </button>
           <button style={btnSidebar} onClick={() => toggleMenuPanel("settings")}>
             <span style={sidebarIconWrap} aria-hidden="true"><MenuIcon name="settings" /></span><span>Chart instellingen</span>
@@ -3198,6 +3411,13 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: B.white, fontFamily: F.body, color: B.dark }}>
       <style>{BRAND_FONT_FACE_CSS}</style>
+      <input
+        ref={chartImportInputRef}
+        type="file"
+        accept=".json,.yarnzoo-chart.json,application/json"
+        onChange={handleImportChartFile}
+        style={{ display: "none" }}
+      />
       <header style={{ background: B.white, position: "sticky", top: 0, zIndex: 100, borderBottom: `1px solid ${B.border}` }}>
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: "16px" }}>
           {/* Logo */}
@@ -3247,6 +3467,8 @@ export default function App() {
                   <div style={dropdownWrap} onClick={e => e.stopPropagation()}>
                     <button style={dropdownItem} onClick={() => { newChart(); setOpenMenu(""); }}>Nieuw chart</button>
                     <button style={dropdownItem} onClick={() => { saveCurrentChart(); setOpenMenu(""); }}>Opslaan</button>
+                    <button style={dropdownItem} onClick={() => { exportChartFile(); setOpenMenu(""); }}>Chart exporteren (.json)</button>
+                    <button style={dropdownItem} onClick={() => { triggerChartImport(); setOpenMenu(""); }}>Chart importeren (.json)</button>
                     <button style={dropdownItem} onClick={() => toggleMenuPanel("settings")}>Chart instellingen</button>
                     <button style={dropdownItem} onClick={() => toggleMenuPanel("library")}>Bibliotheek</button>
                     <button style={dropdownItem} onClick={() => toggleMenuPanel("folders")}>Mappen beheren</button>
@@ -3263,7 +3485,7 @@ export default function App() {
                 )}
               </div>
             )}
-            {chart && !isMobile && <button onClick={exportText} style={{ ...btnPri, padding: "8px 16px", fontSize: "12px" }}>Export</button>}
+            {chart && !isMobile && <button onClick={exportText} style={{ ...btnPri, padding: "8px 16px", fontSize: "12px" }}>Export .txt</button>}
             {isMobile && <button style={btnHead} onClick={() => setSidebarOpen(true)}>Menu</button>}
           </div>
         </div>
@@ -4571,6 +4793,24 @@ function MenuIcon({ name }) {
         <path d="M5 4h12l2 2v14H5z" />
         <path d="M8 4v6h8V4" />
         <path d="M8 20v-6h8v6" />
+      </svg>
+    );
+  }
+  if (name === "export") {
+    return (
+      <svg {...base}>
+        <path d="M12 4v10" />
+        <path d="M8 10l4 4 4-4" />
+        <path d="M5 18h14" />
+      </svg>
+    );
+  }
+  if (name === "import") {
+    return (
+      <svg {...base}>
+        <path d="M12 20V10" />
+        <path d="M8 14l4-4 4 4" />
+        <path d="M5 6h14" />
       </svg>
     );
   }

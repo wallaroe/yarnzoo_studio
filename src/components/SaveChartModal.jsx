@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { saveChart } from '../lib/database'
 
 const B = {
@@ -14,8 +14,10 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
     const [title, setTitle] = useState(existingChart?.title || '')
     const [description, setDescription] = useState(existingChart?.description || '')
     const [isPublic, setIsPublic] = useState(existingChart?.is_public || false)
+    const [saveAsNew, setSaveAsNew] = useState(!!existingChart?.id)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
+    const willOverwriteExisting = !!existingChart?.id && !saveAsNew
 
     const handleSave = async () => {
         if (!title.trim()) {
@@ -23,12 +25,20 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
             return
         }
 
+        if (willOverwriteExisting) {
+            const confirmed = window.confirm(
+                'Je staat op het punt een bestaand cloudpatroon te overschrijven. Weet je dit zeker?'
+            )
+            if (!confirmed) return
+        }
+
         setLoading(true)
         setError('')
 
         try {
             const { data, error: saveError } = await saveChart({
-                chartId: existingChart?.id,
+                chartId: willOverwriteExisting ? existingChart?.id : null,
+                expectedUpdatedAt: willOverwriteExisting ? (existingChart?.updated_at || null) : null,
                 title: title.trim(),
                 description: description.trim(),
                 chartData: chart,
@@ -40,7 +50,12 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
                 isPublic,
             })
 
-            if (saveError) throw saveError
+            if (saveError) {
+                if (saveError.code === 'CONFLICT') {
+                    throw new Error('Dit patroon is intussen aangepast. Open de laatste versie uit de bibliotheek en probeer opnieuw.')
+                }
+                throw saveError
+            }
 
             onSaved(data)
             onClose()
@@ -57,12 +72,28 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
                 <button onClick={onClose} style={closeBtn}>✕</button>
 
                 <h2 style={titleStyle}>
-                    {existingChart ? '✏️ Patroon Bijwerken' : '💾 Patroon Opslaan'}
+                    {willOverwriteExisting ? '✏️ Patroon Overschrijven' : '💾 Patroon Opslaan'}
                 </h2>
 
                 {error && <div style={errorStyle}>⚠️ {error}</div>}
 
                 <div style={formStyle}>
+                    {existingChart?.id && (
+                        <div style={overwriteGuardStyle}>
+                            <label style={overwriteGuardLabel}>
+                                <input
+                                    type="checkbox"
+                                    checked={saveAsNew}
+                                    onChange={(e) => setSaveAsNew(e.target.checked)}
+                                />
+                                Opslaan als nieuw patroon (veilig)
+                            </label>
+                            <div style={overwriteGuardText}>
+                                Zet dit uit als je bewust het bestaande cloudpatroon wilt overschrijven.
+                            </div>
+                        </div>
+                    )}
+
                     <div style={fieldStyle}>
                         <label style={labelStyle}>Patroon Naam *</label>
                         <input
@@ -109,7 +140,7 @@ export default function SaveChartModal({ chart, chartData, onClose, onSaved, exi
                             Annuleren
                         </button>
                         <button onClick={handleSave} style={saveBtn} disabled={loading}>
-                            {loading ? '⏳ Opslaan...' : existingChart ? 'Bijwerken' : 'Opslaan'}
+                            {loading ? '⏳ Opslaan...' : willOverwriteExisting ? 'Bestaand overschrijven' : 'Opslaan als nieuw'}
                         </button>
                     </div>
                 </div>
@@ -200,6 +231,29 @@ const statsStyle = {
     borderRadius: '8px',
     fontSize: '12px',
     color: '#666',
+}
+
+const overwriteGuardStyle = {
+    border: `1px solid ${B.beige}`,
+    background: B.cream,
+    borderRadius: '8px',
+    padding: '12px',
+}
+
+const overwriteGuardLabel = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: B.darkGreen,
+    cursor: 'pointer',
+}
+
+const overwriteGuardText = {
+    fontSize: '11px',
+    color: '#666',
+    marginTop: '6px',
 }
 
 const saveBtn = {

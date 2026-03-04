@@ -19,14 +19,23 @@ export default function CloudToolbar({ chart, chartData, currentChartId, onChart
     const [showSaveModal, setShowSaveModal] = useState(false)
     const [showLibraryModal, setShowLibraryModal] = useState(false)
     const [showShareModal, setShowShareModal] = useState(false)
-    const [savedChartId, setSavedChartId] = useState(currentChartId)
+    const [savedChart, setSavedChart] = useState(currentChartId ? { id: currentChartId } : null)
 
     const handleChartSaved = (savedChart) => {
-        setSavedChartId(savedChart.id)
+        setSavedChart(savedChart)
         alert(`✅ Patroon "${savedChart.title}" opgeslagen in de cloud!`)
     }
 
     const handleLoadChart = (chartData) => {
+        if (chartData?.id) {
+            setSavedChart({
+                id: chartData.id,
+                title: chartData.title,
+                description: chartData.description,
+                is_public: chartData.is_public,
+                updated_at: chartData.updated_at,
+            })
+        }
         if (onChartLoaded) {
             onChartLoaded(chartData)
         }
@@ -51,7 +60,7 @@ export default function CloudToolbar({ chart, chartData, currentChartId, onChart
                             <button onClick={() => setShowLibraryModal(true)} style={secondaryBtnStyle}>
                                 📚 Mijn Bibliotheek
                             </button>
-                            {savedChartId && (
+                            {savedChart?.id && (
                                 <button onClick={() => setShowShareModal(true)} style={secondaryBtnStyle}>
                                     🔗 Delen
                                 </button>
@@ -89,7 +98,7 @@ export default function CloudToolbar({ chart, chartData, currentChartId, onChart
                     chartData={chartData}
                     onClose={() => setShowSaveModal(false)}
                     onSaved={handleChartSaved}
-                    existingChart={savedChartId ? { id: savedChartId } : null}
+                    existingChart={savedChart}
                 />
             )}
 
@@ -100,9 +109,9 @@ export default function CloudToolbar({ chart, chartData, currentChartId, onChart
                 />
             )}
 
-            {showShareModal && savedChartId && (
+            {showShareModal && savedChart?.id && (
                 <ShareModal
-                    chartId={savedChartId}
+                    chartId={savedChart.id}
                     onClose={() => setShowShareModal(false)}
                 />
             )}

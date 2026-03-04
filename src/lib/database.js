@@ -14,7 +14,8 @@ export async function saveChart({
     colorB,
     config,
     isPublic = false,
-    chartId = null // If provided, update existing chart
+    chartId = null, // If provided, update existing chart
+    expectedUpdatedAt = null, // Optional optimistic lock value
 }) {
     const userId = (await supabase.auth.getUser()).data.user?.id
     if (!userId) throw new Error('User not authenticated')
@@ -34,13 +35,29 @@ export async function saveChart({
 
     if (chartId) {
         // Update existing chart
-        const { data, error } = await supabase
+        let query = supabase
             .from('charts')
             .update(chartPayload)
             .eq('id', chartId)
             .eq('user_id', userId)
+
+        if (expectedUpdatedAt) {
+            query = query.eq('updated_at', expectedUpdatedAt)
+        }
+
+        const { data, error } = await query
             .select()
-            .single()
+            .maybeSingle()
+
+        if (!error && !data) {
+            return {
+                data: null,
+                error: {
+                    code: 'CONFLICT',
+                    message: 'Het patroon is intussen gewijzigd. Herlaad eerst de laatste versie voordat je opnieuw opslaat.',
+                },
+            }
+        }
 
         return { data, error }
     } else {

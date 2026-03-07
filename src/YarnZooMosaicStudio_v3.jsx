@@ -2087,6 +2087,28 @@ export default function App() {
     setEditingLibraryTitle("");
   };
 
+  const copyLocalChart = (chartId) => {
+    const original = savedCharts.find(c => c.id === chartId);
+    if (!original) return;
+
+    const now = new Date().toISOString();
+    const copy = {
+      ...original,
+      id: `chart-${Date.now()}`,
+      title: `Kopie van ${original.title || "Naamloze chart"}`,
+      cloudId: null, // Copy starts without cloud link
+      createdAt: now,
+      updatedAt: now,
+      chart: original.chart.map(r => [...r]), // Deep copy chart data
+      colA: { ...original.colA },
+      colB: { ...original.colB },
+      projConfig: original.projConfig ? { ...original.projConfig } : null,
+      thresholdRegions: original.thresholdRegions ? original.thresholdRegions.map(r => ({ ...r })) : [],
+    };
+
+    setSavedCharts(prev => [copy, ...prev]);
+  };
+
   const buildCurrentChartRecord = (overrides = {}) => {
     if (!chart) return null;
     const now = new Date().toISOString();
@@ -3864,6 +3886,9 @@ export default function App() {
                     <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
                       {!isEditing && !saved.isDeleted && (
                         <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => { setEditingLibraryId(saved.id); setEditingLibraryTitle(saved.title || ""); }} title="Hernoemen">✏️</button>
+                      )}
+                      {!isEditing && !saved.isDeleted && (
+                        <button style={{ ...btnSm, padding: "4px 8px", background: "transparent", border: `1px solid ${B.beige}` }} onClick={() => copyLocalChart(saved.id)} title="Kopiëren">📋</button>
                       )}
                       {!saved.isDeleted && (
                         <button

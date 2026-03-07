@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { loadUserCharts, loadUserFolders, deleteChart, renameChart, createFolder, deleteFolder } from '../lib/database'
+import { loadUserCharts, loadUserFolders, deleteChart, renameChart, copyChart, createFolder, deleteFolder } from '../lib/database'
 import { useAuth } from '../lib/AuthContext'
 import { useSystemDialog } from './SystemDialogProvider'
 
@@ -96,6 +96,14 @@ export default function LibraryModal({ onClose, onLoadChart }) {
             setCharts(charts.map(c => c.id === chartId ? { ...c, ...data } : c))
         }
         cancelEditing()
+    }
+
+    const handleCopyChart = async (chartId) => {
+        const { data, error } = await copyChart(chartId)
+        if (!error && data) {
+            // Add the copy to the beginning of the list
+            setCharts([data, ...charts])
+        }
     }
 
     const handleCreateFolder = async () => {
@@ -204,6 +212,13 @@ export default function LibraryModal({ onClose, onLoadChart }) {
                                                         style={loadBtnStyle}
                                                     >
                                                         📥 Laden
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleCopyChart(chart.id)}
+                                                        style={copyBtnStyle}
+                                                        title="Kopiëren"
+                                                    >
+                                                        📋
                                                     </button>
                                                     <button
                                                         onClick={() => startEditing(chart)}
@@ -509,6 +524,15 @@ const folderMetaStyle = {
 }
 
 const editBtnStyle = {
+    background: 'transparent',
+    border: `1px solid ${B.beige}`,
+    borderRadius: '6px',
+    padding: '8px 12px',
+    fontSize: '13px',
+    cursor: 'pointer',
+}
+
+const copyBtnStyle = {
     background: 'transparent',
     border: `1px solid ${B.beige}`,
     borderRadius: '6px',

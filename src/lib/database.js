@@ -123,6 +123,45 @@ export async function renameChart(chartId, newTitle) {
     return { data, error }
 }
 
+export async function copyChart(chartId) {
+    const userId = (await supabase.auth.getUser()).data.user?.id
+    if (!userId) throw new Error('User not authenticated')
+
+    // First, load the original chart
+    const { data: original, error: loadError } = await supabase
+        .from('charts')
+        .select('*')
+        .eq('id', chartId)
+        .eq('user_id', userId)
+        .single()
+
+    if (loadError || !original) {
+        return { data: null, error: loadError || new Error('Chart not found') }
+    }
+
+    // Create a copy with "Kopie van" prefix
+    const copyPayload = {
+        user_id: userId,
+        title: `Kopie van ${original.title}`,
+        description: original.description,
+        chart_data: original.chart_data,
+        grid_width: original.grid_width,
+        grid_height: original.grid_height,
+        color_a: original.color_a,
+        color_b: original.color_b,
+        config: original.config,
+        is_public: false, // Copies start as private
+    }
+
+    const { data, error } = await supabase
+        .from('charts')
+        .insert([copyPayload])
+        .select()
+        .single()
+
+    return { data, error }
+}
+
 // ============================================
 // FOLDERS OPERATIONS
 // ============================================
